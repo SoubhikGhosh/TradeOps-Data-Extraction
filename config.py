@@ -106,30 +106,35 @@ LOG_LEVEL = "INFO" # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 # --- NEW: Classification Prompt Template ---
 CLASSIFICATION_PROMPT_TEMPLATE = """
-**Task:** Analyze the provided document pages ({num_pages} pages) and classify the document type.
+**Task:** Analyze the provided document pages ({num_pages} pages) and classify the document type based on its primary purpose, structure, and content.
 
 **Acceptable Document Types:**
 {acceptable_types_str}
 
 **Instructions:**
-1.  Examine the content, layout, and typical fields across all pages.
-2.  Determine which of the "Acceptable Document Types" listed above best represents the entire document.
-3.  Return ONLY a single JSON object containing:
-    * `"classified_type"`: The determined document type string (MUST be one of the acceptable types listed above). If the document doesn't clearly match any acceptable type, use "UNKNOWN".
-    * `"confidence"`: A score between 0.0 (uncertain) and 1.0 (very certain) indicating your confidence in the classification.
-    * `"reasoning"`: A brief explanation for your classification choice (e.g., "Presence of fields like Invoice No, Buyer, Seller indicates INVOICE.", "Layout and terms match standard Bill of Lading format.", "Content does not strongly align with any specific acceptable type.").
+1.  Examine the content, layout, and typical fields across all pages to understand the document's main function.
+2.  Consider these typical indicators:
+    * **INVOICE:** Look for terms like "Invoice", "Invoice Number", Seller/Buyer details, line items with quantities/prices, total amount due. Can be Commercial, Proforma, or Customs.
+    * **CRL (Customer Request Letter):** Look for applicant/beneficiary details, requested transaction specifics (e.g., Amount, Currency, LC details), explicit statements of request directed towards a bank or financial institution. Often includes terms like "Application", "Request for Letter of Credit", "Debit Account". Title might be "Request Letter" or similar.
+    * **PACKING_LIST:** Focus on shipping details: shipper/consignee, package count, descriptions of goods, weights (Gross/Net), measurements, marks & numbers. Usually does not contain pricing.
+    * **BL (Bill of Lading):** Identify shipper/consignee/notify party, vessel/voyage details, ports of loading/discharge, description of goods, freight terms, 'Shipped on Board' date. It's a transport document.
+    * *(Add similar hints for other specific types you define)*
+3.  Determine which of the "Acceptable Document Types" listed above best represents the **entire** document based on these indicators.
+4.  Return ONLY a single JSON object containing:
+    * `"classified_type"`: The determined document type string (MUST be one of the acceptable types listed above). If the document doesn't clearly match any acceptable type based on the indicators, use "UNKNOWN".
+    * `"confidence"`: A score between 0.0 (uncertain) and 1.0 (very certain) indicating your confidence in the classification, considering how well it matches the indicators.
+    * `"reasoning"`: A brief explanation for your classification choice, referencing specific content or structural elements observed (e.g., "Presence of fields like Invoice No, Buyer, Seller indicates INVOICE.", "Layout and terms match standard Bill of Lading format.", "Identified Applicant/Beneficiary details and LC request elements, classifying as CRL.").
 
 **Example Output:**
 ```json
 {{
-  "classified_type": "INVOICE",
-  "confidence": 0.98,
-  "reasoning": "Document contains key fields like 'Invoice Number', 'Seller Address', 'Buyer Address', and line items with amounts, consistent with a Commercial Invoice."
+  "classified_type": "CRL",
+  "confidence": 0.95,
+  "reasoning": "Document explicitly requests issuance of a Letter of Credit, details Applicant and Beneficiary information, specifies amount and currency."
 }}
 Important: Respond ONLY with the valid JSON object. Do not include any other text, greetings, or explanations outside the JSON structure.
 """
 
-# --- Enhanced Robust Prompt Template (Now uses descriptions) ---
 EXTRACTION_PROMPT_TEMPLATE = """
 **Your Role:** You are a highly meticulous and accurate AI Document Analysis Specialist. Your primary function is to extract structured data from business documents precisely according to instructions.
 

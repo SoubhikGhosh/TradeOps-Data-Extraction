@@ -1,3 +1,4 @@
+# utils.py
 import logging
 import sys
 import re # Keep re for filename parsing
@@ -28,37 +29,49 @@ def clean_filename(filename):
     """Removes problematic characters for file paths."""
     return "".join(c for c in filename if c.isalnum() or c in (' ', '.', '-', '_')).rstrip()
 
-# REMOVED: get_document_type_from_filename function is no longer used.
-
 def parse_filename_for_grouping(filename):
     """
     Parses filename to extract a base name for grouping and a page number.
-    Handles patterns like 'Name 1.pdf', 'Name_1.pdf', 'NamePage1.pdf', 'Name.pdf'
+    Handles patterns like 'Name 1.pdf', 'Name_1.pdf', 'NamePage1.pdf', 'Name1.pdf', 'Name.pdf'
     Returns: (base_name, page_number)
     """
     name_no_ext = filename.rsplit('.', 1)[0]
     page_number = 1 # Default page number
+    base_name = name_no_ext # Default base name
 
-    # Try to find common page number patterns at the end
-    # Pattern: (space or underscore or 'Page' optionally) followed by digits
-    match = re.search(r'([ _]|Page)(\d+)$', name_no_ext, re.IGNORECASE)
+    # Regex Explanation:
+    # (?:[ _]|Page)? : Optionally matches a separator (space, underscore, or 'Page'). Non-capturing group.
+    # (\d+)          : Captures one or more digits (the page number).
+    # $              : Anchors the match to the end of the string.
+    match = re.search(r'(?:[ _]|Page)?(\d+)$', name_no_ext, re.IGNORECASE)
+
     if match:
-        page_number = int(match.group(2))
-        # Base name is the part before the matched pattern
-        base_name = name_no_ext[:match.start()]
-    else:
-        # No clear page number pattern found, assume page 1 and use the whole name (without ext) as base
-        base_name = name_no_ext
+        potential_page_number_str = match.group(1)
+        potential_base_name = name_no_ext[:match.start()]
 
-    # Basic cleaning of base name (remove trailing spaces/underscores)
-    base_name = base_name.strip(' _')
+        # Check if the part before the number is non-empty. Avoids classifying "1.pdf" as base="" page=1.
+        # Also check if the base name itself ends with a number, which might indicate name1 vs name 1 pattern.
+        if potential_base_name: # Ensure base name is not empty
+             page_number = int(potential_page_number_str)
+             base_name = potential_base_name.strip(' _') # Clean trailing separators
+        # If potential_base_name is empty, it means the filename was just digits (e.g., "1.pdf")
+        # Keep the default base_name = name_no_ext and page_number = 1 in this edge case,
+        # or handle specifically if needed:
+        # elif name_no_ext.isdigit():
+        #    base_name = f"doc_{name_no_ext}" # Or keep as is
+        #    page_number = int(name_no_ext)
 
-    # Handle case where filename might *only* be a number (e.g., "1.pdf") - less likely but possible
-    if not base_name and name_no_ext.isdigit():
-         base_name = f"doc_{name_no_ext}" # Assign a generic base name
-         page_number = int(name_no_ext)
-    elif not base_name: # If somehow base_name is empty
-         base_name = "unknown_doc"
+    # If no page pattern matched, the defaults (full name_no_ext as base_name, page 1) are used.
 
-    log.debug(f"Parsed '{filename}': base_name='{base_name}', page_number={page_number}")
+    # Final safety check for empty base name
+    if not base_name:
+        base_name = "unknown_doc"
+        log.warning(f"Could not determine valid base name for '{filename}', using '{base_name}'.")
+
+
+    # --- DEBUG LOGGING ---
+    # Uncomment the line below temporarily to see exactly how filenames are parsed
+    log.debug(f"Parsed Filename: '{filename}' -> Base Name: '{base_name}', Page: {page_number}")
+    # --- /DEBUG LOGGING ---
+
     return base_name, page_number
