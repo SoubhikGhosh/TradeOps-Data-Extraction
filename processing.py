@@ -8,79 +8,40 @@ import json
 from pathlib import Path
 import pandas as pd
 from collections import defaultdict
+from typing import Dict, List, Tuple, Any
 
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part
 import google.api_core.exceptions
 
-
 from config import (
     PROJECT_ID, LOCATION, API_ENDPOINT, MODEL_NAME, SAFETY_SETTINGS,
     DOCUMENT_FIELDS, MAX_WORKERS, TEMP_DIR, OUTPUT_FILENAME,
-    EXTRACTION_PROMPT_TEMPLATE
+    EXTRACTION_PROMPT_TEMPLATE, CLASSIFICATION_PROMPT_TEMPLATE # Import new template
 )
-from utils import log, get_document_type_from_filename
+from utils import log, parse_filename_for_grouping # Import new parsing function
 
 # --- Initialize Vertex AI ---
 try:
     log.info(f"Initializing Vertex AI for project='{PROJECT_ID}', location='{LOCATION}'")
-    vertexai.init(project=PROJECT_ID, location=LOCATION) # api_endpoint=API_ENDPOINT - often not needed
+    vertexai.init(project=PROJECT_ID, location=LOCATION)
     log.info("Vertex AI initialized successfully.")
-    # Load the generative model
     model = GenerativeModel(MODEL_NAME)
     log.info(f"Loaded Vertex AI Model: {MODEL_NAME}")
 except Exception as e:
     log.exception(f"FATAL: Failed to initialize Vertex AI or load model: {e}")
     raise
 
-# --- PDF Mime Type ---
 PDF_MIME_TYPE = "application/pdf"
 
 # --- Helper Functions ---
-def _group_files_by_doc_type(folder_path: Path):
-    """Groups PDF files in a folder by detected document type and sorts by page number."""
-    doc_groups = defaultdict(list)
-    for pdf_file in folder_path.glob('*.pdf'):
-        try:
-            # Basic page number extraction (e.g., "CRL 1.pdf", "Invoice_page_2.pdf")
-            match = re.search(r'[ _](\d+)\.pdf$', pdf_file.name, re.IGNORECASE)
-            page_number = int(match.group(1)) if match else 1 # Default to 1 if no number
 
-            # Get base name for type detection (e.g., "CRL", "Invoice")
-            base_name = re.sub(r'[ _]?\d+\.pdf$', '', pdf_file.name, flags=re.IGNORECASE)
-            doc_type = get_document_type_from_filename(base_name) # Use refined function
-
-            doc_groups[doc_type].append({"path": pdf_file, "page": page_number})
-
-        except ValueError as e:
-             log.warning(f"Skipping file due to error in processing name '{pdf_file.name}': {e}")
-        except Exception as e:
-            log.warning(f"Error processing file {pdf_file.name}: {e}")
-
-    # Sort pages within each document group
-    for doc_type in doc_groups:
-        doc_groups[doc_type].sort(key=lambda x: x["page"])
-
-    log.debug(f"Grouped documents for {folder_path.name}: { {k: len(v) for k, v in doc_groups.items()} }")
-    return dict(doc_groups)
-
-
-def _extract_data_from_document(case_id: str, doc_type: str, pdf_files: list, fields_to_extract: list):
-    """
-    Uses Vertex AI Gemini model to extract data from a list of PDF files (pages).
-    """
-    log.info(f"Starting extraction for Case: {case_id}, Document Type: {doc_type}, Pages: {len(pdf_files)}")
-
-    if not pdf_files:
-        log.warning(f"No PDF files provided for Case: {case_id}, Document Type: {doc_type}")
-        return None
-
-    # --- Prepare input for Vertex AI Model ---
-    # Create Part objects for each PDF page. Assumes model can handle PDF MIME type.
-    # Sort pages just in case they weren't already
-    pdf_files.sort(key=lambda x: x["page"])
+def _prepare_pdf_parts(pdf_files: List[Dict]) -> Tuple[List[Part], List[str]]:
+    """Prepares Vertex AI Part objects from a list of PDF file paths."""
     parts = []
     file_paths_for_log = []
+    # Sort by page number just in case
+    pdf_files.sort(key=lambda x: x["page"])
     for file_info in pdf_files:
         pdf_path = file_info["path"]
         file_paths_for_log.append(pdf_path.name)
@@ -90,96 +51,183 @@ def _extract_data_from_document(case_id: str, doc_type: str, pdf_files: list, fi
             parts.append(Part.from_data(data=pdf_content, mime_type=PDF_MIME_TYPE))
         except FileNotFoundError:
             log.error(f"File not found during Vertex AI input prep: {pdf_path}")
-            return None # Or handle differently
+            return None, file_paths_for_log # Return None for parts on error
         except Exception as e:
             log.error(f"Error reading file {pdf_path}: {e}")
-            return None
+            return None, file_paths_for_log # Return None for parts on error
+    return parts, file_paths_for_log
 
-    if not parts:
-        log.error(f"Could not create any valid input Parts for Vertex AI. Case: {case_id}, Doc: {doc_type}")
-        return None
+def _parse_vertex_json_response(response: Any, context: str) -> Dict | None:
+    """Parses JSON response from Vertex AI, handling potential errors."""
+    try:
+        # Handle cases where response might be blocked or have unexpected structure
+        if not hasattr(response, 'text') or not response.text:
+             if response.candidates and not response.candidates[0].content.parts:
+                 block_reason = response.candidates[0].finish_reason
+                 safety_ratings = response.candidates[0].safety_ratings
+                 log.error(f"Content likely blocked for {context}. Reason: {block_reason}, Ratings: {safety_ratings}")
+                 return {"error": f"Content Blocked: {block_reason}", "safety_ratings": str(safety_ratings)} # Make ratings serializable
+             else:
+                 log.error(f"Received empty or invalid response object for {context}. Response: {response}")
+                 return {"error": "Empty or invalid response object"}
 
-    log.debug(f"Prepared {len(parts)} parts for Vertex AI from files: {file_paths_for_log}")
+        # Strip potential markdown code fences ```json ... ``` if model adds them
+        raw_json = response.text.strip()
+        if raw_json.startswith("```json"):
+             raw_json = raw_json[7:-3].strip() # Remove ```json and ```
+        elif raw_json.startswith("```"): # Less common, just ```
+            raw_json = raw_json[3:-3].strip()
 
-    # --- Prepare the Prompt ---
-    field_list_str = "\n".join([f"- {field}" for field in fields_to_extract])
+        # Validate start and end characters for safety
+        if not (raw_json.startswith('{') and raw_json.endswith('}')):
+             log.error(f"Response for {context} is not valid JSON structure. Raw Text:\n{raw_json}")
+             return {"error": "Invalid JSON structure", "raw_response": raw_json}
+
+
+        parsed_data = json.loads(raw_json)
+        log.debug(f"Successfully parsed JSON response for {context}")
+        return parsed_data
+
+    except json.JSONDecodeError as json_err:
+        log.error(f"Failed to decode JSON response from Vertex AI for {context}. Error: {json_err}")
+        log.error(f"Raw Vertex AI Response Text:\n{response.text}")
+        return {"error": "JSON Decode Error", "raw_response": response.text}
+    except AttributeError as attr_err:
+         log.error(f"Attribute error parsing response for {context}. Error: {attr_err}. Response: {response}")
+         return {"error": f"AttributeError parsing response: {attr_err}"}
+    except Exception as e:
+        log.exception(f"Unexpected error parsing Vertex AI response for {context}. Error: {e}")
+        return {"error": f"Unexpected Parsing Error: {e}"}
+
+# --- Stage 1: Grouping by Base Filename ---
+def _group_files_by_base_name(folder_path: Path) -> Dict[str, List[Dict]]:
+    """Groups PDF files in a folder by parsed base name and sorts by page number."""
+    doc_groups = defaultdict(list)
+    for pdf_file in folder_path.glob('*.pdf'):
+        try:
+            base_name, page_number = parse_filename_for_grouping(pdf_file.name)
+            doc_groups[base_name].append({"path": pdf_file, "page": page_number})
+        except Exception as e:
+            log.warning(f"Error parsing filename {pdf_file.name} in {folder_path.name}: {e}. Skipping file.")
+
+    # Sort pages within each document group
+    for base_name in doc_groups:
+        doc_groups[base_name].sort(key=lambda x: x["page"])
+
+    log.debug(f"Grouped files by base_name for {folder_path.name}: { {k: len(v) for k, v in doc_groups.items()} }")
+    return dict(doc_groups)
+
+# --- Stage 2: Document Classification ---
+def _classify_document_type(case_id: str, base_name: str, pdf_files: list, acceptable_types: list):
+    """Uses Vertex AI to classify the document type from a list of PDF pages."""
+    log.info(f"Starting classification for Case: {case_id}, Group: '{base_name}', Pages: {len(pdf_files)}")
+    context = f"Case: {case_id}, Group: '{base_name}' (Classification)" # Context for logging
+
+    if not pdf_files:
+        log.warning(f"No PDF files provided for {context}")
+        return {"error": "No PDF files provided"}
+
+    parts, file_paths_for_log = _prepare_pdf_parts(pdf_files)
+    if parts is None:
+         log.error(f"Failed to prepare PDF parts for {context}")
+         return {"error": "Failed to prepare PDF parts"}
+
+    acceptable_types_str = "\n".join([f"- {atype}" for atype in acceptable_types])
+    prompt = CLASSIFICATION_PROMPT_TEMPLATE.format(
+        num_pages=len(parts),
+        acceptable_types_str=acceptable_types_str
+    )
+    log.debug(f"Generated classification prompt for {context}") # Prompt is less sensitive
+
+    try:
+        log.info(f"Sending classification request to Vertex AI for {context}")
+        full_request_content = [prompt] + parts
+        response = model.generate_content(
+            full_request_content,
+            generation_config={"response_mime_type": "application/json"},
+            safety_settings=SAFETY_SETTINGS,
+            stream=False
+        )
+        log.info(f"Received classification response from Vertex AI for {context}")
+
+        # Parse the JSON response
+        classification_result = _parse_vertex_json_response(response, context)
+        return classification_result # Will contain 'classified_type', 'confidence', 'reasoning' or 'error'
+
+    except google.api_core.exceptions.GoogleAPIError as api_err:
+        log.exception(f"Vertex AI API Error during {context}. Error: {api_err}")
+        return {"error": f"Vertex AI API Error: {api_err}"}
+    except Exception as e:
+        log.exception(f"Unexpected Error during {context}. Error: {e}")
+        return {"error": f"Unexpected Error: {e}"}
+
+
+# --- Stage 3: Data Extraction ---
+def _extract_data_from_document(case_id: str, base_name: str, pdf_files: list, classified_doc_type: str, fields_to_extract: list):
+    """Uses Vertex AI Gemini model to extract data for a *classified* document type."""
+    log.info(f"Starting extraction for Case: {case_id}, Group: '{base_name}', Type: {classified_doc_type}, Pages: {len(pdf_files)}")
+    context = f"Case: {case_id}, Group: '{base_name}', Type: {classified_doc_type} (Extraction)"
+
+    if not pdf_files:
+        log.warning(f"No PDF files provided for {context}")
+        return {"error": "No PDF files provided for extraction"}
+    if not fields_to_extract:
+        log.warning(f"No fields defined for extraction for type {classified_doc_type} in {context}")
+        return {"error": f"No fields defined for type {classified_doc_type}"}
+
+
+    parts, file_paths_for_log = _prepare_pdf_parts(pdf_files)
+    if parts is None:
+         log.error(f"Failed to prepare PDF parts for {context}")
+         return {"error": "Failed to prepare PDF parts for extraction"}
+
+    # Prepare the field list string with descriptions for the extraction prompt
+    field_list_str = "\n".join([f"- **{field_dict['name']}**: {field_dict['description']}" for field_dict in fields_to_extract])
+
     prompt = EXTRACTION_PROMPT_TEMPLATE.format(
-        doc_type=doc_type,
+        # Note: Using classified_doc_type here, not base_name
+        doc_type=classified_doc_type,
         case_id=case_id,
         num_pages=len(parts),
         field_list_str=field_list_str
     )
-    log.debug(f"Generated prompt for Case {case_id}, Doc {doc_type}:\n{prompt[:500]}...") # Log truncated prompt
+    log.debug(f"Generated extraction prompt for {context}") # Avoid logging full sensitive prompt if necessary
 
-    # --- Call Vertex AI ---
     try:
-        log.info(f"Sending request to Vertex AI for Case: {case_id}, Doc: {doc_type}")
-        # Combine the prompt text and the PDF parts
+        log.info(f"Sending extraction request to Vertex AI for {context}")
         full_request_content = [prompt] + parts
         response = model.generate_content(
             full_request_content,
-            generation_config={"response_mime_type": "application/json"}, # Request JSON output
+            generation_config={"response_mime_type": "application/json"},
             safety_settings=SAFETY_SETTINGS,
-            stream=False # Get the full response at once
+            stream=False
         )
-        log.info(f"Received response from Vertex AI for Case: {case_id}, Doc: {doc_type}")
+        log.info(f"Received extraction response from Vertex AI for {context}")
 
-        # --- Parse the Response ---
-        # Assuming the model successfully returns valid JSON in response.text
-        # Add robust error handling for JSON parsing
-        try:
-            # Strip potential markdown code fences ```json ... ``` if model adds them
-            raw_json = response.text.strip()
-            if raw_json.startswith("```json"):
-                 raw_json = raw_json[7:]
-            if raw_json.endswith("```"):
-                raw_json = raw_json[:-3]
-            raw_json = raw_json.strip()
-
-            extracted_data = json.loads(raw_json)
-            log.debug(f"Successfully parsed JSON response for Case: {case_id}, Doc: {doc_type}")
-            return extracted_data
-
-        except json.JSONDecodeError as json_err:
-            log.error(f"Failed to decode JSON response from Vertex AI for Case: {case_id}, Doc: {doc_type}. Error: {json_err}")
-            log.error(f"Raw Vertex AI Response Text:\n{response.text}")
-            # Fallback: Try to return at least the raw text? Or indicate failure.
-            # You might try regex or partial extraction here if JSON fails consistently
-            return {"error": "JSON Decode Error", "raw_response": response.text}
-        except AttributeError:
-             log.error(f"Response object lacks 'text' attribute. Type: {type(response)}. Response: {response}")
-             # Check for blocked content
-             if response.candidates and not response.candidates[0].content.parts:
-                 block_reason = response.candidates[0].finish_reason
-                 safety_ratings = response.candidates[0].safety_ratings
-                 log.error(f"Content likely blocked. Reason: {block_reason}, Ratings: {safety_ratings}")
-                 return {"error": f"Content Blocked: {block_reason}", "safety_ratings": safety_ratings}
-             return {"error": "AttributeError parsing response"}
-
+        # Parse the JSON response
+        extracted_data = _parse_vertex_json_response(response, context)
+        return extracted_data # Will contain field data or 'error'
 
     except google.api_core.exceptions.GoogleAPIError as api_err:
-        log.exception(f"Vertex AI API Error for Case: {case_id}, Doc: {doc_type}. Error: {api_err}")
+        log.exception(f"Vertex AI API Error during {context}. Error: {api_err}")
         return {"error": f"Vertex AI API Error: {api_err}"}
     except Exception as e:
-        log.exception(f"Unexpected Error during Vertex AI call or parsing for Case: {case_id}, Doc: {doc_type}. Error: {e}")
+        log.exception(f"Unexpected Error during {context}. Error: {e}")
         return {"error": f"Unexpected Error: {e}"}
-
 
 # --- Main Processing Function ---
 def process_zip_file(zip_file_path: str):
     """
-    Main function to process the uploaded zip file.
-    1. Extracts zip to a temporary location.
-    2. Iterates through case folders.
-    3. Groups PDFs by document type within each case.
-    4. Uses ThreadPoolExecutor to process documents concurrently via Vertex AI.
-    5. Aggregates results into a pandas DataFrame.
-    6. Saves the DataFrame to an Excel file.
+    Main function (Revised Workflow):
+    1. Extracts zip.
+    2. Groups files by base filename within each case.
+    3. Classifies document type for each group using Vertex AI.
+    4. Extracts data for successfully classified/supported types using Vertex AI.
+    5. Aggregates results into a pandas DataFrame and saves to Excel.
     """
-    all_extracted_data = []
-    output_excel_path = Path(OUTPUT_FILENAME) # Store locally first
+    final_results_list = [] # Store final row data here
+    output_excel_path = Path(OUTPUT_FILENAME)
 
-    # Create a temporary directory for extraction
     with tempfile.TemporaryDirectory(prefix="doc_proc_", dir=TEMP_DIR) as temp_dir_str:
         temp_dir = Path(temp_dir_str)
         log.info(f"Created temporary directory: {temp_dir}")
@@ -196,93 +244,181 @@ def process_zip_file(zip_file_path: str):
             log.exception(f"Error extracting zip file: {e}")
             raise
 
-        # --- 2. & 3. Iterate Cases and Group Files ---
+        # --- 2. Initial Grouping by Base Filename ---
+        initial_groups = {} # {case_id: {base_name: [file_info_dict]}}
         case_folders = [d for d in temp_dir.iterdir() if d.is_dir()]
         if not case_folders:
              log.error(f"No case folders found in the extracted zip content at {temp_dir}")
              raise ValueError("No case folders found in the zip file.")
 
-        tasks = []
-        # Prepare tasks for concurrent execution
         for case_folder in case_folders:
             case_id = case_folder.name
-            log.info(f"Processing Case ID: {case_id}")
-            document_groups = _group_files_by_doc_type(case_folder)
+            log.info(f"Performing initial file grouping for Case ID: {case_id}")
+            initial_groups[case_id] = _group_files_by_base_name(case_folder)
+            if not initial_groups[case_id]:
+                 log.warning(f"No processable PDF groups found in case folder: {case_id}")
+                 # Add a row indicating no docs found for this case
+                 final_results_list.append({
+                     "CASE_ID": case_id,
+                     "GROUP_Basename": "N/A",
+                     "Processing_Status": "No processable PDF files found"
+                 })
 
-            if not document_groups:
-                log.warning(f"No processable documents found in case folder: {case_id}")
-                # Add a row with just Case ID if needed, or skip
-                all_extracted_data.append({"CASE_ID": case_id, "Processing_Status": "No documents found"})
-                continue
 
-            for doc_type, pdf_files in document_groups.items():
-                if doc_type in DOCUMENT_FIELDS:
-                    fields_to_extract = DOCUMENT_FIELDS[doc_type]
-                    # Add task: (case_id, doc_type, pdf_files_list, fields)
-                    tasks.append((case_id, doc_type, pdf_files, fields_to_extract))
-                else:
-                    log.warning(f"Skipping unknown document type '{doc_type}' for Case ID: {case_id}. Define it in config.DOCUMENT_FIELDS.")
+        # --- 3. Classify Document Types Concurrently ---
+        classification_tasks = []
+        acceptable_types = list(DOCUMENT_FIELDS.keys()) # Get types we can potentially handle
+        acceptable_types.append("UNKNOWN") # Allow UNKNOWN as a valid classification response
 
-        # --- 4. Concurrent Processing ---
-        case_results = defaultdict(lambda: {"CASE_ID": None}) # Store results per case_id
-        if tasks:
-             log.info(f"Submitting {len(tasks)} document extraction tasks to {MAX_WORKERS} workers.")
-             with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                future_to_task = {
-                    executor.submit(_extract_data_from_document, *task_args): task_args
-                    for task_args in tasks
+        for case_id, groups in initial_groups.items():
+            for base_name, pdf_files in groups.items():
+                 if pdf_files: # Only classify if there are files
+                     classification_tasks.append((case_id, base_name, pdf_files, acceptable_types))
+
+        classification_results = {} # {(case_id, base_name): classification_dict or error_dict}
+        if classification_tasks:
+            log.info(f"Submitting {len(classification_tasks)} document classification tasks to {MAX_WORKERS} workers.")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="Classifier") as executor:
+                future_to_classify = {
+                    executor.submit(_classify_document_type, *task_args): task_args
+                    for task_args in classification_tasks
                 }
-
-                for future in concurrent.futures.as_completed(future_to_task):
-                    task_args = future_to_task[future]
-                    case_id, doc_type, _, _ = task_args
-                    case_results[case_id]["CASE_ID"] = case_id # Ensure CASE_ID is set
-
+                for future in concurrent.futures.as_completed(future_to_classify):
+                    case_id, base_name, _, _ = future_to_classify[future]
                     try:
-                        result_json = future.result()
-                        if result_json:
-                            if "error" in result_json:
-                                log.error(f"Extraction failed for Case: {case_id}, Doc: {doc_type}. Reason: {result_json['error']}")
-                                # Add error status to the row for this doc type
-                                case_results[case_id][f"{doc_type}_Processing_Error"] = result_json['error']
-                            else:
-                                log.info(f"Successfully processed Case: {case_id}, Doc: {doc_type}")
-                                # Flatten the result JSON into the case row
-                                for field, data in result_json.items():
-                                    # Ensure data is a dict with expected keys, handle variations if needed
-                                    if isinstance(data, dict) and all(k in data for k in ['value', 'confidence', 'reasoning']):
-                                         # Prefix field names with doc_type for clarity in Excel
-                                        base_field_name = f"{doc_type}_{field}"
-                                        case_results[case_id][f"{base_field_name}_Value"] = data.get('value')
-                                        case_results[case_id][f"{base_field_name}_Confidence"] = data.get('confidence')
-                                        case_results[case_id][f"{base_field_name}_Reasoning"] = data.get('reasoning')
-                                    else:
-                                        log.warning(f"Unexpected format for field '{field}' in response for Case: {case_id}, Doc: {doc_type}. Data: {data}")
-                                        case_results[case_id][f"{doc_type}_{field}_Raw"] = str(data) # Store raw if format incorrect
-
-                        else:
-                             log.warning(f"No result returned for Case: {case_id}, Doc: {doc_type} (may indicate skipped file or internal issue).")
-                             case_results[case_id][f"{doc_type}_Processing_Status"] = "No result from extraction"
-
+                        result = future.result()
+                        classification_results[(case_id, base_name)] = result
                     except Exception as exc:
-                        log.exception(f"Error retrieving result for Case: {case_id}, Doc: {doc_type}. Error: {exc}")
-                        case_results[case_id][f"{doc_type}_Processing_Error"] = f"Task execution failed: {exc}"
-
-             all_extracted_data.extend(case_results.values())
-
-        # --- 5. & 6. Aggregate and Save to Excel ---
-        if not all_extracted_data:
-             log.warning("No data was successfully extracted from any case.")
-             # Create an empty dataframe or handle as needed
-             df = pd.DataFrame([{"Status": "No data extracted"}])
+                        log.exception(f"Error retrieving classification result for Case: {case_id}, Group: '{base_name}'. Error: {exc}")
+                        classification_results[(case_id, base_name)] = {"error": f"Task execution failed: {exc}"}
         else:
-            log.info(f"Aggregating results from {len(all_extracted_data)} cases.")
-            df = pd.DataFrame(all_extracted_data)
-            # Reorder columns - Put CASE_ID first, then maybe status/errors, then fields
+             log.info("No classification tasks to submit.")
+
+
+        # --- 4. Extract Data Concurrently (Based on Classification) ---
+        extraction_tasks = []
+        for (case_id, base_name), class_result in classification_results.items():
+            if isinstance(class_result, dict) and "error" not in class_result:
+                classified_type = class_result.get("classified_type")
+                if classified_type and classified_type != "UNKNOWN" and classified_type in DOCUMENT_FIELDS:
+                    fields_to_extract = DOCUMENT_FIELDS[classified_type]
+                    if fields_to_extract: # Check if there are fields defined
+                        # Retrieve the original pdf_files list for this group
+                        pdf_files = initial_groups.get(case_id, {}).get(base_name)
+                        if pdf_files:
+                             extraction_tasks.append((case_id, base_name, pdf_files, classified_type, fields_to_extract))
+                        else:
+                             log.error(f"Logic Error: PDF files not found for Case {case_id}, Group '{base_name}' during extraction task prep.")
+                    else:
+                         log.warning(f"No fields configured for extraction for classified type '{classified_type}' in Case {case_id}, Group '{base_name}'.")
+                         # Store classification result, but mark as no extraction fields
+                         final_results_list.append({
+                            "CASE_ID": case_id,
+                            "GROUP_Basename": base_name,
+                            "CLASSIFIED_Type": classified_type,
+                            "CLASSIFICATION_Confidence": class_result.get('confidence'),
+                            "CLASSIFICATION_Reasoning": class_result.get('reasoning'),
+                            "Processing_Status": "Extraction skipped - No fields configured"
+                         })
+
+                else:
+                     # Handle UNKNOWN or unconfigured types
+                     status = f"Classification result: {classified_type or 'Not Classified'}"
+                     if classified_type == "UNKNOWN": status = "Classified as UNKNOWN"
+                     elif classified_type: status = f"Classified as '{classified_type}' (Unsupported/Not Configured)"
+
+                     final_results_list.append({
+                         "CASE_ID": case_id,
+                         "GROUP_Basename": base_name,
+                         "CLASSIFIED_Type": classified_type,
+                         "CLASSIFICATION_Confidence": class_result.get('confidence'),
+                         "CLASSIFICATION_Reasoning": class_result.get('reasoning'),
+                         "Processing_Status": status
+                     })
+            else:
+                 # Handle classification errors
+                 error_msg = class_result.get('error', 'Unknown classification error') if isinstance(class_result, dict) else 'Invalid classification result'
+                 final_results_list.append({
+                    "CASE_ID": case_id,
+                    "GROUP_Basename": base_name,
+                    "Processing_Status": f"Classification Failed: {error_msg}"
+                 })
+
+        # Dictionary to hold extraction results, keyed by (case_id, base_name)
+        extraction_results_map = {}
+        if extraction_tasks:
+            log.info(f"Submitting {len(extraction_tasks)} document extraction tasks to {MAX_WORKERS} workers.")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="Extractor") as executor:
+                future_to_extract = {
+                    executor.submit(_extract_data_from_document, *task_args): task_args[:2] # Key by (case_id, base_name)
+                    for task_args in extraction_tasks
+                }
+                for future in concurrent.futures.as_completed(future_to_extract):
+                    key = future_to_extract[future] # (case_id, base_name)
+                    try:
+                        result = future.result()
+                        extraction_results_map[key] = result
+                    except Exception as exc:
+                        log.exception(f"Error retrieving extraction result for key {key}. Error: {exc}")
+                        extraction_results_map[key] = {"error": f"Task execution failed: {exc}"}
+        else:
+            log.info("No extraction tasks to submit.")
+
+        # --- 5. Aggregate Results ---
+        log.info("Aggregating final results...")
+        for task_args in extraction_tasks:
+            case_id, base_name, _, classified_type, fields_to_extract = task_args
+            key = (case_id, base_name)
+            extraction_result = extraction_results_map.get(key)
+            class_result = classification_results.get(key, {}) # Get classification details too
+
+            row_data = {
+                "CASE_ID": case_id,
+                "GROUP_Basename": base_name,
+                "CLASSIFIED_Type": classified_type,
+                "CLASSIFICATION_Confidence": class_result.get('confidence'),
+                "CLASSIFICATION_Reasoning": class_result.get('reasoning')
+            }
+
+            if isinstance(extraction_result, dict) and "error" not in extraction_result:
+                 row_data["Processing_Status"] = "Extraction Successful"
+                 # Flatten the extracted data
+                 for field_dict in fields_to_extract:
+                     field_name = field_dict['name']
+                     field_data = extraction_result.get(field_name)
+                     # Prefix field names with CLASSIFIED type for clarity
+                     prefix = f"{classified_type}_{field_name}"
+                     if isinstance(field_data, dict):
+                         row_data[f"{prefix}_Value"] = field_data.get('value')
+                         row_data[f"{prefix}_Confidence"] = field_data.get('confidence')
+                         row_data[f"{prefix}_Reasoning"] = field_data.get('reasoning')
+                     else:
+                          log.warning(f"Unexpected format for field '{field_name}' in extraction response for {key}. Data: {field_data}")
+                          row_data[f"{prefix}_Raw"] = str(field_data) # Store raw if format incorrect
+                          row_data["Processing_Status"] = "Extraction Partially Successful (Format Issue)"
+
+            else:
+                 # Handle extraction errors
+                 error_msg = extraction_result.get('error', 'Unknown extraction error') if isinstance(extraction_result, dict) else 'Invalid extraction result'
+                 row_data["Processing_Status"] = f"Extraction Failed: {error_msg}"
+
+            final_results_list.append(row_data)
+
+
+        # --- 6. Save to Excel ---
+        if not final_results_list:
+             log.warning("No data rows were generated for the Excel file.")
+             df = pd.DataFrame([{"Status": "No data processed or extracted"}])
+        else:
+            log.info(f"Creating DataFrame from {len(final_results_list)} aggregated results.")
+            df = pd.DataFrame(final_results_list)
+            # Reorder columns: Case Info, Status, Classification Info, then Extracted Fields
             cols = df.columns.tolist()
-            if "CASE_ID" in cols:
-                 cols.insert(0, cols.pop(cols.index("CASE_ID")))
-            df = df[cols]
+            core_cols = ["CASE_ID", "GROUP_Basename", "Processing_Status", "CLASSIFIED_Type", "CLASSIFICATION_Confidence", "CLASSIFICATION_Reasoning"]
+            # Ensure core cols exist and move them to the front
+            ordered_cols = [c for c in core_cols if c in cols]
+            extracted_cols = sorted([c for c in cols if c not in core_cols])
+            df = df[ordered_cols + extracted_cols]
 
         try:
             log.info(f"Saving aggregated data to Excel: {output_excel_path}")
@@ -293,5 +429,5 @@ def process_zip_file(zip_file_path: str):
             log.exception(f"Failed to save DataFrame to Excel file '{output_excel_path}': {e}")
             raise RuntimeError(f"Failed to save results to Excel: {e}")
 
-    # End of `with tempfile.TemporaryDirectory` - temp dir is now deleted
+    # End of `with tempfile.TemporaryDirectory`
     log.info("Temporary directory cleaned up.")
