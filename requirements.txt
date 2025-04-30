@@ -1,0 +1,17 @@
+# requirements.txt
+fastapi>=0.100.0 # Use a recent version
+uvicorn[standard]>=0.20.0 # For running the server
+python-multipart>=0.0.5 # For file uploads in FastAPI
+google-cloud-aiplatform>=1.38.1 # Vertex AI SDK
+pandas>=1.5.0 # For data manipulation and Excel output
+openpyxl>=3.0.10 # Required by pandas for .xlsx support
+python-dotenv>=1.0.0 # Optional: for loading .env files
+google-api-python-client # Sometimes needed indirectly by gcloud libraries
+google-auth # For authentication
+
+# Optional, if you need direct PDF to image conversion (fallback)
+pdf2image>=1.16.0
+Pillow>=9.0.0 # Dependency for pdf2image
+
+# Optional, if using PyMuPDF for PDF text/image extraction
+PyMuPDF>=1.22.0
