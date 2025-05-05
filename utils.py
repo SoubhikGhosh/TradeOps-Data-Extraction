@@ -68,10 +68,7 @@ def parse_filename_for_grouping(filename):
         base_name = "unknown_doc"
         log.warning(f"Could not determine valid base name for '{filename}', using '{base_name}'.")
 
-
-    # --- DEBUG LOGGING ---
     # Uncomment the line below temporarily to see exactly how filenames are parsed
-    log.debug(f"Parsed Filename: '{filename}' -> Base Name: '{base_name}', Page: {page_number}")
-    # --- /DEBUG LOGGING ---
+    log.info(f"Parsed Filename: '{filename}' -> Base Name: '{base_name}', Page: {page_number}")
 
     return base_name, page_number
