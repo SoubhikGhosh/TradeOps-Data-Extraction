@@ -9,7 +9,7 @@ load_dotenv() # Optional: Load environment variables from a .env file
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "hbl-uat-ocr-fw-app-prj-spk-4d")
 LOCATION = "asia-south1"
 # Use a powerful multimodal model capable of handling PDFs and complex instructions
-MODEL_NAME = "gemini-1.5-pro-preview-0409" # Or gemini-1.5-flash / newer appropriate model
+MODEL_NAME = "gemini-1.5-pro" # Or gemini-1.5-flash / newer appropriate model
 API_ENDPOINT = f"{LOCATION}-aiplatform.googleapis.com" # Often not needed if default is correct
 
 # --- Safety Settings ---
@@ -24,7 +24,30 @@ SAFETY_SETTINGS = {
 # Structure: { "DOC_TYPE": [ { "name": "Field Name", "description": "Industry standard description" }, ... ] }
 DOCUMENT_FIELDS = {
     "CRL": [
-        {"name": "DATE & TIME OF RECEIPT OF DOCUMENT", "description": "The exact date and time when the document (e.g., Customer Request Letter) was received by the processing entity (e.g., bank)."},
+        {"name": "DATE & TIME OF RECEIPT OF DOCUMENT", 
+         "description": ''' **Objective:** Analyze the provided document image to locate a specific circular seal and extract the date and time indicated by it.
+
+            **Seal Description:**
+            1.  **Structure:** Identify a circular seal composed of two concentric circles.
+            2.  **Inner Circle:** Contains a date (e.g., YYYY-MM-DD, DD MON YYYY, etc.). Directly **above** the date, centered within the inner circle, there is a distinct triangular pointer.
+            3.  **Outer Ring (Annulus):** The area between the two circles functions as a 24-hour time scale.
+                * It is divided into 24 major segments, representing hours 00 through 23. Assume these are arranged sequentially, typically clockwise with 00 hour often at the 12 o'clock position (top).
+                * Each major hour segment is further subdivided into 4 equal parts, representing 15-minute intervals within that hour (e.g., the segment between 00 and 01 is divided into markings for 00:00, 00:15, 00:30, 00:45).
+            4.  **Time Indication:** The **tip** of the triangular pointer (located above the date in the inner circle) points **radially outwards** to a specific position on the time scale markings in the outer ring. This position indicates the precise time (hour and minute).
+
+            **Task:**
+            1.  **Locate:** Find the described circular seal within the document image.
+            2.  **Extract Date:** Perform OCR on the inner circle to read and extract the full date. Note the format if recognizable.
+            3.  **Determine Time:**
+                * Identify the exact position (hour and 15-minute interval) on the outer ring scale indicated by the tip of the triangle pointer.
+                * Calculate the corresponding time in HH:MM format (24-hour clock).
+            4.  **Handle Imperfections:** The seal or document image may be faded, partially obscured, incomplete, or rotated.
+                * Use visible portions of the seal structure (circles, pointer, date, time markings) to infer the complete information.
+                * If necessary, use geometric analysis (e.g., calculating the angle of the pointer relative to visible hour markers or the inferred center/top '00' position) to estimate the time as accurately as possible. Assume 360 degrees for the full circle, 15 degrees per hour segment ($360/24$), and 3.75 degrees per 15-minute segment ($15/4$).
+
+            **Output:**
+            * Provide the extracted **Date** and extracted **Time** in DD-MM-YYYY HH:MM format (24-hour clock). If estimation was required due to poor visibility, note this.
+        '''},
         {"name": "CUSTOMER REQUEST LETTER DATE", "description": "The date mentioned on the customer's formal request letter."},
         {"name": "BENEFICIARY NAME", "description": "The name of the party (typically the exporter/seller) who is entitled to receive payment under the credit."},
         {"name": "BENEFICIARY ADDRESS", "description": "The full address of the beneficiary (exporter/seller)."},
