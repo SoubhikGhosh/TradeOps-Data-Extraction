@@ -9,7 +9,7 @@ load_dotenv() # Optional: Load environment variables from a .env file
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "hbl-uat-ocr-fw-app-prj-spk-4d")
 LOCATION = "asia-south1"
 # Use a powerful multimodal model capable of handling PDFs and complex instructions
-MODEL_NAME = "gemini-1.5-pro" # Or gemini-1.5-flash / newer appropriate model
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-pro-002") # Or gemini-1.5-flash / newer appropriate model
 API_ENDPOINT = f"{LOCATION}-aiplatform.googleapis.com" # Often not needed if default is correct
 
 # --- Safety Settings ---
@@ -82,7 +82,7 @@ DOCUMENT_FIELDS = {
         {"name": "THIRD PARTY EXPORTER COUNTRY", "description": "Country of the third-party exporter, if applicable."}
     ],
     "INVOICE": [
-        {"name": "TYPE OF INVOICE - COMMERCIAL/PERFORMA/CUSTOMS/", "description": "The classification of the invoice (e.g., Commercial Invoice for payment, Proforma Invoice for quote, Customs Invoice for declaration)."},
+        {"name": "TYPE OF INVOICE - COMMERCIAL/PROFORMA/CUSTOMS/", "description": "The classification of the invoice (e.g., Commercial Invoice for payment, Proforma Invoice for quote, Customs Invoice for declaration)."},
         {"name": "INVOICE DATE", "description": "The date the invoice was issued by the seller."},
         {"name": "INVOICE NO", "description": "The unique identification number assigned to this invoice by the seller."},
         {"name": "BUYER NAME", "description": "The name of the party purchasing the goods (importer/consignee)."},
