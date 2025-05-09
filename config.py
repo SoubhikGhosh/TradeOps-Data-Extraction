@@ -29,6 +29,7 @@ SAFETY_SETTINGS = {
 DOCUMENT_FIELDS = {
     "CRL": [
         {
+<<<<<<< Updated upstream
             "name": "DATE & TIME OF RECEIPT FROM CIRCULAR SEAL",
             "description": """
     **Objective:** Analyze the provided document image to locate a specific circular seal and accurately extract the date and time indicated by it. The time extraction is of particular importance and should be handled with precision.
@@ -185,6 +186,92 @@ DOCUMENT_FIELDS = {
             "name": "THIRD PARTY EXPORTER COUNTRY",
             "description": "Country of the third-party exporter, if applicable.",
         },
+=======
+    "name": "DATE & TIME OF RECEIPT FROM CIRCULAR SEAL (Advanced Leading Edge Method)",
+    "description": """
+    **Objective:** Analyze the provided document image to locate a specific circular seal and accurately extract the date and time indicated by it. Time extraction must be precise, based on the **leading edge** of the arrow pointer and the 24-slot/4-segment time mechanism, including a specific rule for alignment with major hour lines. Extraneous text on the seal not directly part of the date or time scale markings should be ignored for date/time determination.
+
+    **Seal Description:**
+    1.  **Structure:** Identify a circular seal composed of two concentric circles.
+    2.  **Inner Circle (Date):** Contains a date in a recognizable format (e.g., YY-MM-DD, DD MON YY, MM/DD/YY).
+    3.  **Pointer (Arrow Icon):** A distinct **triangular pointer (arrow icon)** is located near the inner circle, typically centered above the date. The base of the triangle is towards the center of the seal, and its sharp end points radially outwards towards the outer time scale ring.
+    4.  **Outer Ring (24-Hour Time Scale):** The area between the two circles functions as a 24-hour time scale, divided into 24 major 'slots' representing hours 00 through 23.
+        * **Major Hour Lines:** These slots are typically demarcated by prominent lines (major hour lines) marking the beginning of each hour (e.g., the line for '01', '02', ..., '12', ..., '23', '00'). Assume these are arranged sequentially in a clockwise direction, with the '00' hour typically located at the 12 o'clock (top) position.
+        * **Minute Segments within an Hour Slot:** Each major hour slot (e.g., the slot for hour 'H', which is the space between the major hour line 'H' and the major hour line 'H+1') is further divided into **four equal 15-minute segments**. These are defined by the position of the pointer's leading edge *after it has passed the major hour line 'H'*:
+            * The **first segment (for H:00)**: Begins immediately after the major hour line 'H' and ends just before the first minor tick mark.
+            * The **second segment (for H:15)**: Begins at the **first** distinct minor tick mark (short line or point) after major hour line 'H' and ends just before the second minor tick mark.
+            * The **third segment (for H:30)**: Begins at the **second** distinct minor tick mark after major hour line 'H' and ends just before the third minor tick mark.
+            * The **fourth segment (for H:45)**: Begins at the **third** distinct minor tick mark after major hour line 'H' and ends just before the next major hour line ('H+1').
+    5.  **Time Indication (Crucial - "Leading Edge" Rule with Specific Major Hour Line Interpretation):**
+        * The time is determined by the **leading edge of the triangular pointer** (defined as the edge of the pointer that moves foremost in a clockwise direction) as it aligns with the 24-hour time scale.
+        * **Hour and Minute Determination is based on two distinct cases:**
+
+            * **Case A: Leading Edge Precisely on a Major Hour Line:**
+                If the pointer's **leading edge** aligns *exactly* with a major hour line that marks the beginning of hour 'H' on the dial (e.g., the line for '01', '02', ..., '12', ..., '23', '00'), the time indicated is the completion of the *previous* hour.
+                * The hour is **(H-1)**. (If H is '00' on the dial, the indicated hour is '23'. If H is '01', the hour is '00', etc.)
+                * The minutes are **:00**.
+                * *Example:* If the leading edge is exactly on the '12' major hour line, the time is 11:00. If exactly on the '01' major hour line, the time is 00:00. If exactly on the '00' major hour line, the time is 23:00.
+
+            * **Case B: Leading Edge *Within* an Hour Slot (i.e., Past a Major Hour Line):**
+                If the pointer's **leading edge** has moved *past* a major hour line 'H' and is now positioned *within* the slot for hour 'H' (i.e., between major hour line 'H' and major hour line 'H+1'), then:
+                * The hour is **'H'** (the hour of the slot it is currently in).
+                * The **minutes** are determined by which of the four 15-minute segments of hour 'H' (as defined in Seal Description point 4) the pointer's **leading edge** currently occupies or has just entered:
+                    * If the leading edge is in the first segment (just past major line 'H', before 1st minor tick): Minutes are **:00** (Time is H:00).
+                    * If the leading edge is in the second segment (past 1st minor tick, before 2nd minor tick): Minutes are **:15** (Time is H:15).
+                    * If the leading edge is in the third segment (past 2nd minor tick, before 3rd minor tick): Minutes are **:30** (Time is H:30).
+                    * If the leading edge is in the fourth segment (past 3rd minor tick, before next major hour line 'H+1'): Minutes are **:45** (Time is H:45).
+
+    **Task:**
+    1.  **Locate Seal:** Find the described circular seal within the document image.
+    2.  **Extract Date:** Perform OCR on the inner circle to reliably read and extract the full date.
+    3.  **Determine Time (Precise Interpretation using "Leading Edge" and Case A/B Rules):**
+        * Carefully assess the position of the pointer's **leading edge**.
+        * First, determine if **Case A** applies (leading edge exactly on a major hour line). If so, calculate time as (H-1):00.
+        * If Case A does not apply, then **Case B** applies. Identify the current hour slot 'H' the leading edge is within. Then, determine which of the four 15-minute segments (:00, :15, :30, :45) of hour 'H' the leading edge occupies to set the minutes.
+        * **Calculate Time:** Combine the identified hour and minutes into HH:MM format (24-hour clock). Aim for exact alignment and rule application.
+
+    4.  **Handle Imperfections:** While aiming for exact interpretation based on the rules:
+        * Utilize any visible portions of the seal.
+        * If image blur or quality makes the exact position of the leading edge truly ambiguous between two distinct interpretations (e.g., exactly on a major line vs. just past it, or between two minute segments), this inherent ambiguity should be noted. However, the primary goal is to apply the rules assuming a clear reading if possible. "Estimation" should only refer to resolving slight visual ambiguities to fit one of the defined rules, not inventing new rules.
+
+    **Output:**
+    * Provide the extracted **Date** and extracted **Time** in DD-MM-YYYY HH:MM format (24-hour clock).
+    * If, despite best efforts for exact rule application, a significant visual ambiguity required a judgment call (e.g., pointer edge extremely close to a line, making Case A vs. Case B decision difficult), briefly note this.
+"""
+},
+        {"name": "CUSTOMER REQUEST LETTER DATE", "description": "The date mentioned on the customer's formal request letter."},
+        {"name": "BENEFICIARY NAME", "description": "The name of the party (typically the exporter/seller) who is entitled to receive payment under the credit."},
+        {"name": "BENEFICIARY ADDRESS", "description": "The full address of the beneficiary (exporter/seller)."},
+        {"name": "BENEFICIARY COUNTRY", "description": "The country where the beneficiary is located."},
+        {"name": "CURRENCY", "description": "The specific currency code (e.g., USD, EUR, INR) for the transaction amount."},
+        {"name": "AMOUNT", "description": "The principal monetary value of the transaction or credit."},
+        {"name": "BENEFICIARY ACCOUNT NO / IBAN", "description": "The beneficiary's bank account number or International Bank Account Number (IBAN) for receiving funds."},
+        {"name": "BENEFICIARY BANK", "description": "The name of the bank where the beneficiary holds their account."},
+        {"name": "BENEFICIARY BANK ADDRESS", "description": "The full address of the beneficiary's bank."},
+        {"name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE", "description": "The unique identification code of the beneficiary's bank (SWIFT/BIC for international, Sort Code for UK, BSB for Australia, IFSC for India)."},
+        {"name": "STANDARD DECLARATIONS AS PER PRODUCTS", "description": "Any standard clauses, declarations, or compliance statements required for the specific financial product."},
+        {"name": "APPLICANT SIGNATURE", "description": "Indication or confirmation of the applicant's signature (may be text stating 'Signed' or an image area). Focus on confirmation text if present."},
+        {"name": "APPLICANT NAME", "description": "The name of the party (typically the importer/buyer) who requested the transaction or credit."},
+        {"name": "APPLICANT ADDRESS", "description": "The full address of the applicant (importer/buyer)."},
+        {"name": "APPLICANT COUNTRY", "description": "The country where the applicant is located."},
+        {"name": "TRANSACTION Product Code Selection", "description": "A specific code identifying the type of financial product or transaction."},
+        {"name": "TRANSACTION EVENT", "description": "A code or description identifying the specific event within the transaction lifecycle (e.g., issuance, amendment)."},
+        {"name": "VALUE DATE", "description": "The date on which the funds are expected to be credited or debited."},
+        {"name": "HS CODE", "description": "The Harmonized System code, an international standard for classifying traded goods."},
+        {"name": "TYPE OF GOODS", "description": "A general description of the merchandise being traded."},
+        {"name": "INCOTERM", "description": "The standardized trade term (e.g., FOB, CIF, EXW) defining buyer/seller responsibilities for shipping, risk, and costs."},
+        {"name": "DEBIT ACCOUNT NO", "description": "The applicant's account number from which funds will be debited."},
+        {"name": "FEE ACCOUNT NO", "description": "The account number from which transaction fees will be debited (if different from the main debit account)."},
+        {"name": "LATEST SHIPMENT DATE", "description": "The latest date by which the goods must be shipped according to the credit terms."},
+        {"name": "DISPATCH PORT", "description": "The port or place from where the goods are dispatched or shipped (Port of Loading)."},
+        {"name": "DELIVERY PORT", "description": "The port or place where the goods are to be delivered (Port of Discharge)."},
+        {"name": "FB CHARGES", "description": "Details regarding who bears the foreign bank charges (e.g., BEN, OUR, SHA)."},
+        {"name": "INTERMEDIARY BANK NAME", "description": "The name of any intermediary bank involved in the payment chain (if applicable)."},
+        {"name": "INTERMEDIARY BANK ADDRESS", "description": "The address of the intermediary bank (if applicable)."},
+        {"name": "INTERMEDIARY BANK COUNTRY", "description": "The country of the intermediary bank (if applicable)."},
+        {"name": "THIRD PARTY EXPORTER NAME", "description": "Name of a third-party exporter involved, if different from the main beneficiary."},
+        {"name": "THIRD PARTY EXPORTER COUNTRY", "description": "Country of the third-party exporter, if applicable."}
+>>>>>>> Stashed changes
     ],
     "INVOICE": [
         {
