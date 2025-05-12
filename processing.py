@@ -21,6 +21,72 @@ from config import (
 )
 from utils import log, parse_filename_for_grouping # Import new parsing function
 
+import time
+import random
+from tenacity import (
+    retry,
+    stop_after_attempt, 
+    wait_exponential_jitter,
+    retry_if_exception_type,
+    before_sleep_log,
+    RetryError
+)
+import google.api_core.exceptions
+import logging
+
+# Define which exceptions to retry on
+RETRYABLE_EXCEPTIONS = (
+    google.api_core.exceptions.ResourceExhausted,  # 429 Too Many Requests
+    google.api_core.exceptions.ServiceUnavailable,  # 503 Service Unavailable
+    google.api_core.exceptions.DeadlineExceeded,    # 504 Gateway Timeout
+    google.api_core.exceptions.InternalServerError, # 500 Internal Server Error
+    google.api_core.exceptions.Aborted,             # Aborted transaction
+    google.api_core.exceptions.NetworkError,        # Network connectivity issues
+    ConnectionError,                               # General connection issues
+    TimeoutError                                    # Timeouts
+)
+
+def vertex_ai_retry_decorator(
+    max_attempts=50, 
+    min_wait_seconds=1, 
+    max_wait_seconds=60, 
+    jitter_max_seconds=10
+):
+    """
+    Creates a retry decorator specifically for Vertex AI API calls.
+    
+    Args:
+        max_attempts: Maximum number of retry attempts
+        min_wait_seconds: Minimum wait time between retries
+        max_wait_seconds: Maximum wait time between retries
+        jitter_max_seconds: Maximum jitter to add to wait time
+    
+    Returns:
+        A retry decorator configured for Vertex AI API calls
+    """
+    return retry(
+        retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
+        stop=stop_after_attempt(max_attempts),
+        wait=wait_exponential_jitter(
+            multiplier=1, 
+            min=min_wait_seconds, 
+            max=max_wait_seconds,
+            jitter=jitter_max_seconds
+        ),
+        before_sleep=before_sleep_log(log, logging.WARNING),
+        reraise=True
+    )
+
+@vertex_ai_retry_decorator()
+def _make_vertex_call(model, content, generation_config, safety_settings):
+    """Makes a Vertex AI API call with built-in retry logic."""
+    return model.generate_content(
+        content,
+        generation_config=generation_config,
+        safety_settings=safety_settings,
+        stream=False
+    )
+
 # --- Initialize Vertex AI ---
 try:
     log.info(f"Initializing Vertex AI for project='{PROJECT_ID}', location='{LOCATION}'")
@@ -121,7 +187,7 @@ def _group_files_by_base_name(folder_path: Path) -> Dict[str, List[Dict]]:
 def _classify_document_type(case_id: str, base_name: str, pdf_files: list, acceptable_types: list):
     """Uses Vertex AI to classify the document type from a list of PDF pages."""
     log.info(f"Starting classification for Case: {case_id}, Group: '{base_name}', Pages: {len(pdf_files)}")
-    context = f"Case: {case_id}, Group: '{base_name}' (Classification)" # Context for logging
+    context = f"Case: {case_id}, Group: '{base_name}' (Classification)"
 
     if not pdf_files:
         log.warning(f"No PDF files provided for {context}")
@@ -142,11 +208,11 @@ def _classify_document_type(case_id: str, base_name: str, pdf_files: list, accep
     try:
         log.info(f"Sending classification request to Vertex AI for {context}")
         full_request_content = [prompt] + parts
-        response = model.generate_content(
+        response = _make_vertex_call(
+            model,
             full_request_content,
             generation_config={"response_mime_type": "application/json"},
-            safety_settings=SAFETY_SETTINGS,
-            stream=False
+            safety_settings=SAFETY_SETTINGS
         )
         log.info(f"Received classification response from Vertex AI for {context}")
 
@@ -154,6 +220,9 @@ def _classify_document_type(case_id: str, base_name: str, pdf_files: list, accep
         classification_result = _parse_vertex_json_response(response, context)
         return classification_result # Will contain 'classified_type', 'confidence', 'reasoning' or 'error'
 
+    except RetryError as retry_err:
+        log.error(f"All retry attempts failed for {context}: {retry_err}")
+        return {"error": f"All retry attempts failed: {retry_err.last_attempt.exception()}"}
     except google.api_core.exceptions.GoogleAPIError as api_err:
         log.exception(f"Vertex AI API Error during {context}. Error: {api_err}")
         return {"error": f"Vertex AI API Error: {api_err}"}
@@ -196,11 +265,11 @@ def _extract_data_from_document(case_id: str, base_name: str, pdf_files: list, c
     try:
         log.info(f"Sending extraction request to Vertex AI for {context}")
         full_request_content = [prompt] + parts
-        response = model.generate_content(
+        response = _make_vertex_call(
+            model,
             full_request_content,
             generation_config={"response_mime_type": "application/json"},
-            safety_settings=SAFETY_SETTINGS,
-            stream=False
+            safety_settings=SAFETY_SETTINGS
         )
         log.info(f"Received extraction response from Vertex AI for {context}")
 
@@ -208,6 +277,8 @@ def _extract_data_from_document(case_id: str, base_name: str, pdf_files: list, c
         extracted_data = _parse_vertex_json_response(response, context)
         return extracted_data # Will contain field data or 'error'
 
+    except RetryError as retry_err:
+        log.error(f"All retry attempts failed for {context}: {retry_err}")
     except google.api_core.exceptions.GoogleAPIError as api_err:
         log.exception(f"Vertex AI API Error during {context}. Error: {api_err}")
         return {"error": f"Vertex AI API Error: {api_err}"}
