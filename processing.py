@@ -1,10 +1,12 @@
-# processing.py
 import os
 import zipfile
 import tempfile
 import concurrent.futures
 import re
 import json
+import random  # Added for jitter in retry mechanism
+import time    # Added for sleep in retry mechanism
+import traceback  # Added for error tracing in retry mechanism
 from pathlib import Path
 import pandas as pd
 from collections import defaultdict
@@ -12,7 +14,7 @@ from typing import Dict, List, Tuple, Any
 
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part
-import google.api_core.exceptions
+import google.api_core.exceptions as google_exceptions  # Updated import for retry mechanism
 
 from config import (
     PROJECT_ID, LOCATION, API_ENDPOINT, MODEL_NAME, SAFETY_SETTINGS,
@@ -35,6 +37,69 @@ except Exception as e:
 PDF_MIME_TYPE = "application/pdf"
 
 # --- Helper Functions ---
+
+@staticmethod
+def _call_vertex_ai_with_retry(
+    model_instance: GenerativeModel,
+    prompt_parts: List[Any],
+    max_retries: int = 5,
+    initial_delay: float = 1.0,
+    exponential_base: float = 2.0,
+    jitter: bool = True
+) -> Any: # Returns the model's response object
+    """
+    Calls the Vertex AI model's generate_content method with exponential backoff.
+    Args:
+        model_instance: The initialized GenerativeModel instance.
+        prompt_parts: List of parts to send to generate_content (e.g., [prompt, file_part]).
+        max_retries: Maximum number of retries.
+        initial_delay: Initial delay in seconds.
+        exponential_base: Multiplier for the delay.
+        jitter: Whether to add a random jitter to the delay.
+    Returns:
+        The response from model.generate_content().
+    Raises:
+        google_exceptions.ResourceExhausted, google_exceptions.ServiceUnavailable,
+        or other relevant exceptions if retries fail or a non-retryable error occurs.
+    """
+    num_retries = 0
+    delay = initial_delay
+    # Specific Google API errors to retry on.
+    # ResourceExhausted (429), TooManyRequests (429), ServiceUnavailable (503)
+    retryable_errors = (
+        google_exceptions.ResourceExhausted,
+        google_exceptions.TooManyRequests,
+        google_exceptions.ServiceUnavailable,
+        google_exceptions.DeadlineExceeded # Can also be transient
+    )
+    while True:
+        try:
+            log.debug(f"Attempting Vertex AI API call (Attempt {num_retries + 1}/{max_retries + 1})")
+            response = model_instance.generate_content(prompt_parts)
+            log.debug(f"Vertex AI API call successful (Attempt {num_retries + 1}/{max_retries + 1})")
+            return response
+        except retryable_errors as e:
+            num_retries += 1
+            if num_retries > max_retries:
+                log.error(
+                    f"Max retries ({max_retries}) exceeded for Vertex AI API call. "
+                    f"Last error: {type(e).__name__} - {e}"
+                )
+                raise  # Re-raise the last retryable exception
+            actual_delay = delay
+            if jitter:
+                actual_delay += random.uniform(0, delay * 0.25)  # Add up to 25% jitter
+            log.warning(
+                f"Vertex AI API call failed with {type(e).__name__} (Attempt {num_retries}/{max_retries}). "
+                f"Retrying in {actual_delay:.2f} seconds..."
+            )
+            time.sleep(actual_delay)
+            delay *= exponential_base  # Increase delay
+        except Exception as e:  # Catch other non-retryable Google API errors or general errors
+            log.error(f"Non-retryable error during Vertex AI API call: {type(e).__name__} - {e}")
+            log.error(traceback.format_exc()) # Log full traceback for unexpected errors
+            raise # Re-raise these errors immediately
+
 
 def _prepare_pdf_parts(pdf_files: List[Dict]) -> Tuple[List[Part], List[str]]:
     """Prepares Vertex AI Part objects from a list of PDF file paths."""
@@ -117,7 +182,6 @@ def _group_files_by_base_name(folder_path: Path) -> Dict[str, List[Dict]]:
     log.debug(f"Grouped files by base_name for {folder_path.name}: { {k: len(v) for k, v in doc_groups.items()} }")
     return dict(doc_groups)
 
-# --- Stage 2: Document Classification ---
 def _classify_document_type(case_id: str, base_name: str, pdf_files: list, acceptable_types: list):
     """Uses Vertex AI to classify the document type from a list of PDF pages."""
     log.info(f"Starting classification for Case: {case_id}, Group: '{base_name}', Pages: {len(pdf_files)}")
@@ -142,19 +206,22 @@ def _classify_document_type(case_id: str, base_name: str, pdf_files: list, accep
     try:
         log.info(f"Sending classification request to Vertex AI for {context}")
         full_request_content = [prompt] + parts
-        response = model.generate_content(
-            full_request_content,
-            generation_config={"response_mime_type": "application/json"},
-            safety_settings=SAFETY_SETTINGS,
-            stream=False
+        
+        # Use the retry mechanism here instead of direct API call
+        response = _call_vertex_ai_with_retry(
+            model_instance=model,
+            prompt_parts=full_request_content,
+            max_retries=5,
+            initial_delay=1.0
         )
+        
         log.info(f"Received classification response from Vertex AI for {context}")
 
         # Parse the JSON response
         classification_result = _parse_vertex_json_response(response, context)
         return classification_result # Will contain 'classified_type', 'confidence', 'reasoning' or 'error'
 
-    except google.api_core.exceptions.GoogleAPIError as api_err:
+    except google_exceptions.GoogleAPIError as api_err:
         log.exception(f"Vertex AI API Error during {context}. Error: {api_err}")
         return {"error": f"Vertex AI API Error: {api_err}"}
     except Exception as e:
@@ -196,19 +263,22 @@ def _extract_data_from_document(case_id: str, base_name: str, pdf_files: list, c
     try:
         log.info(f"Sending extraction request to Vertex AI for {context}")
         full_request_content = [prompt] + parts
-        response = model.generate_content(
-            full_request_content,
-            generation_config={"response_mime_type": "application/json"},
-            safety_settings=SAFETY_SETTINGS,
-            stream=False
+        
+        # Use the retry mechanism here instead of direct API call
+        response = _call_vertex_ai_with_retry(
+            model_instance=model,
+            prompt_parts=full_request_content,
+            max_retries=5,
+            initial_delay=1.0
         )
+        
         log.info(f"Received extraction response from Vertex AI for {context}")
 
         # Parse the JSON response
         extracted_data = _parse_vertex_json_response(response, context)
         return extracted_data # Will contain field data or 'error'
 
-    except google.api_core.exceptions.GoogleAPIError as api_err:
+    except google_exceptions.GoogleAPIError as api_err:
         log.exception(f"Vertex AI API Error during {context}. Error: {api_err}")
         return {"error": f"Vertex AI API Error: {api_err}"}
     except Exception as e:
