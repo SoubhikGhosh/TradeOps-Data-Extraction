@@ -21,74 +21,242 @@ SAFETY_SETTINGS = {
 }
 
 # --- Document Field Definitions with Descriptions ---
-# Structure: { "DOC_TYPE": [ { "name": "Field Name", "description": "Industry standard description" }, ... ] }
 DOCUMENT_FIELDS = {
     "CRL": [
-        {"name": "DATE & TIME OF RECEIPT OF DOCUMENT", 
-         "description": ''' **Objective:** Analyze the provided document image to locate a specific circular seal and extract the date and time indicated by it.
-
-            **Seal Description:**
-            1.  **Structure:** Identify a circular seal composed of two concentric circles.
-            2.  **Inner Circle:** Contains a date (e.g., YYYY-MM-DD, DD MON YYYY, etc.). Directly **above** the date, centered within the inner circle, there is a distinct triangular pointer.
-            3.  **Outer Ring (Annulus):** The area between the two circles functions as a 24-hour time scale.
-                * It is divided into 24 major segments, representing hours 00 through 23. Assume these are arranged sequentially, typically clockwise with 00 hour often at the 12 o'clock position (top).
-                * Each major hour segment is further subdivided into 4 equal parts, representing 15-minute intervals within that hour (e.g., the segment between 00 and 01 is divided into markings for 00:00, 00:15, 00:30, 00:45).
-            4.  **Time Indication:** The **tip** of the triangular pointer (located above the date in the inner circle) points **radially outwards** to a specific position on the time scale markings in the outer ring. This position indicates the precise time (hour and minute).
-
-            **Task:**
-            1.  **Locate:** Find the described circular seal within the document image.
-            2.  **Extract Date:** Perform OCR on the inner circle to read and extract the full date. Note the format if recognizable.
-            3.  **Determine Time:**
-                * Identify the exact position (hour and 15-minute interval) on the outer ring scale indicated by the tip of the triangle pointer.
-                * Calculate the corresponding time in HH:MM format (24-hour clock).
-            4.  **Handle Imperfections:** The seal or document image may be faded, partially obscured, incomplete, or rotated.
-                * Use visible portions of the seal structure (circles, pointer, date, time markings) to infer the complete information.
-                * If necessary, use geometric analysis (e.g., calculating the angle of the pointer relative to visible hour markers or the inferred center/top '00' position) to estimate the time as accurately as possible. Assume 360 degrees for the full circle, 15 degrees per hour segment ($360/24$), and 3.75 degrees per 15-minute segment ($15/4$).
-
-            **Output:**
-            * Provide the extracted **Date** and extracted **Time** in DD-MM-YYYY HH:MM format (24-hour clock). If estimation was required due to poor visibility, note this.
-        '''},
-        {"name": "CUSTOMER REQUEST LETTER DATE", "description": "The date mentioned on the customer's formal request letter."},
-        {"name": "BENEFICIARY NAME", "description": "The name of the party (typically the exporter/seller) who is entitled to receive payment under the credit."},
-        {"name": "BENEFICIARY ADDRESS", "description": "The full address of the beneficiary (exporter/seller)."},
-        {"name": "BENEFICIARY COUNTRY", "description": "The country where the beneficiary is located."},
-        {"name": "CURRENCY", "description": "The specific currency code (e.g., USD, EUR, INR) for the transaction amount."},
-        {"name": "AMOUNT", "description": "The principal monetary value of the transaction or credit."},
-        {"name": "BENEFICIARY ACCOUNT NO / IBAN", "description": "The beneficiary's bank account number or International Bank Account Number (IBAN) for receiving funds."},
-        {"name": "BENEFICIARY BANK", "description": "The name of the bank where the beneficiary holds their account."},
-        {"name": "BENEFICIARY BANK ADDRESS", "description": "The full address of the beneficiary's bank."},
-        {"name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE", "description": "The unique identification code of the beneficiary's bank (SWIFT/BIC for international, Sort Code for UK, BSB for Australia, IFSC for India)."},
-        {"name": "STANDARD DECLARATIONS AS PER PRODUCTS", "description": "Any standard clauses, declarations, or compliance statements required for the specific financial product."},
-        {"name": "APPLICANT SIGNATURE", "description": "Indication or confirmation of the applicant's signature (may be text stating 'Signed' or an image area). Focus on confirmation text if present."},
-        {"name": "APPLICANT NAME", "description": "The name of the party (typically the importer/buyer) who requested the transaction or credit."},
-        {"name": "APPLICANT ADDRESS", "description": "The full address of the applicant (importer/buyer)."},
-        {"name": "APPLICANT COUNTRY", "description": "The country where the applicant is located."},
-        {"name": "TRANSACTION Product Code Selection", "description": "A specific code identifying the type of financial product or transaction."},
-        {"name": "TRANSACTION EVENT", "description": "A code or description identifying the specific event within the transaction lifecycle (e.g., issuance, amendment)."},
-        {"name": "VALUE DATE", "description": "The date on which the funds are expected to be credited or debited."},
-        {"name": "HS CODE", "description": "The Harmonized System code, an international standard for classifying traded goods."},
-        {"name": "TYPE OF GOODS", "description": "A general description of the merchandise being traded."},
-        {"name": "INCOTERM", "description": "The standardized trade term (e.g., FOB, CIF, EXW) defining buyer/seller responsibilities for shipping, risk, and costs."},
-        {"name": "DEBIT ACCOUNT NO", "description": "The applicant's account number from which funds will be debited."},
-        {"name": "FEE ACCOUNT NO", "description": "The account number from which transaction fees will be debited (if different from the main debit account)."},
-        {"name": "LATEST SHIPMENT DATE", "description": "The latest date by which the goods must be shipped according to the credit terms."},
-        {"name": "DISPATCH PORT", "description": "The port or place from where the goods are dispatched or shipped (Port of Loading)."},
-        {"name": "DELIVERY PORT", "description": "The port or place where the goods are to be delivered (Port of Discharge)."},
-        {"name": "FB CHARGES", "description": "Details regarding who bears the foreign bank charges (e.g., BEN, OUR, SHA)."},
-        {"name": "INTERMEDIARY BANK NAME", "description": "The name of any intermediary bank involved in the payment chain (if applicable)."},
-        {"name": "INTERMEDIARY BANK ADDRESS", "description": "The address of the intermediary bank (if applicable)."},
-        {"name": "INTERMEDIARY BANK COUNTRY", "description": "The country of the intermediary bank (if applicable)."},
-        {"name": "THIRD PARTY EXPORTER NAME", "description": "Name of a third-party exporter involved, if different from the main beneficiary."},
-        {"name": "THIRD PARTY EXPORTER COUNTRY", "description": "Country of the third-party exporter, if applicable."}
+        {"name": "DATE & TIME OF RECEIPT OF DOCUMENT",
+         "description": """**Objective:** Locate and extract the exact date and time a financial institution or processing center officially received the customer's request document. This is often indicated by a physical stamp or a handwritten notation.
+            **Details to Look For:** Reception Stamps (circular time-clock seals, rectangular/other stamps with date/time) or Handwritten Notations ("Received on:", "Inward Date/Time:"). Prioritize official bank stamps.
+            **Extraction Task:** Locate the clearest reception mark. Extract full date (DD-MM-YYYY, DD MON YYYY, etc.) and time (HH:MM, 24-hour format). Handle imperfections by inferring from visible clues.
+            **Output Format Guidance:** "DD-MM-YYYY HH:MM". If time is absent, use "00:00". Example: "15-07-2024 14:35".
+            **Search Hint:** Check first page, cover sheets, margins for stamps like "RECEIVED [Bank Name] [Date] [Time Dial/Printed Time]".
+        """},
+        {"name": "CUSTOMER REQUEST LETTER DATE",
+         "description": """The specific date on which the customer (applicant) formally prepared and dated their request letter or application form. Typically found in the letter's header, near applicant details, often labeled 'Date:' or 'Dated:'. This is the letter's authorship date by the customer.
+            Example: "03-10-2023" or "October 3, 2023".
+        """},
+        {"name": "BENEFICIARY NAME",
+         "description": """The full, official legal name of the party (exporter, seller, service provider) designated to receive funds or benefit from the transaction.
+            Look for labels: 'Beneficiary:', 'Beneficiary Name:', 'Payee:', 'To (Beneficiary):', 'Supplier Name:'. Extract complete name including legal suffixes (Ltd., Inc.).
+            Example: "Global Export Services Ltd." or "Jane Doe International".
+        """},
+        {"name": "BENEFICIARY ADDRESS",
+         "description": """The complete mailing address of the beneficiary, including street, city, state/province, postal code. Found below/next to beneficiary name or in a 'Beneficiary Details' section. Extract as a single string.
+            Example: "123 International Parkway, Suite 500, Export City, EC 12345, Globalia".
+        """},
+        {"name": "BENEFICIARY COUNTRY",
+         "description": """The country where the beneficiary is officially located. Often the last part of the beneficiary's address or labeled 'Country:'.
+            Example: "Germany", "Singapore".
+        """},
+        {"name": "REMITTANCE CURRENCY",
+         "description": """The three-letter ISO 4217 currency code (e.g., USD, EUR, INR) of the funds requested for remittance.
+            Look for labels: 'Currency:', 'CCY:', 'Transaction Currency:', or a code next to the amount.
+            Example: "USD", "EUR".
+        """},
+        {"name": "REMITTANCE AMOUNT",
+         "description": """The principal monetary value of the transaction requested, in the specified 'REMITTANCE CURRENCY'.
+            Look for labels: 'Amount:', 'Transaction Amount:', 'Value:'. Extract as a numerical value (e.g., "21712.18").
+            Example: "50000.00" or "12345.67".
+        """},
+        {"name": "BENEFICIARY ACCOUNT NO / IBAN",
+         "description": """The beneficiary's bank account number or International Bank Account Number (IBAN) for fund credit.
+            Look for labels: 'Account No.:', 'A/C No.:', 'IBAN:', in 'Payment Instructions' or 'Beneficiary Bank Details'. IBANs start with a two-letter country code.
+            Example (IBAN): "DE89370400440532013000" or (Account No.): "001-234567-890".
+        """},
+        {"name": "BENEFICIARY BANK", 
+         "description": """The full official name of the bank where the beneficiary holds their account.
+            Look for labels: 'Beneficiary Bank:', 'Bank Name:', 'Receiving Bank:'. Usually listed near account number and SWIFT code.
+            (Note: Correct common spelling is 'Beneficiary Bank').
+            Example: "Global Standard Commercial Bank", "Exporter's First Union Bank".
+        """},
+        {"name": "BENEFICIARY BANK ADDRESS",
+         "description": """The full mailing address of the beneficiary's bank, including street, city, and country.
+            Found with other beneficiary bank details. (Note: Correct common spelling is 'Beneficiary Bank Address').
+            Example: "789 Finance Avenue, Central Banking District, Capital City, CB 67890, Globalia".
+        """},
+        {"name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE", 
+         "description": """Unique identification code of the beneficiary's bank/branch (SWIFT/BIC, Sort Code, BSB, IFSC, etc.).
+            Look for 'SWIFT Code:', 'BIC:', 'IFSC:', 'Sort Code:', 'BSB:'. (Note: Correct common spelling is 'Beneficiary Bank SWIFT Code...').
+            Example (SWIFT): "BANKGB2LXXX" or (IFSC): "BKID0001234".
+        """},
+        {"name": "STANDARD DECLARATIONS AS PER PRODUCTS",
+         "description": """Any standard clauses, undertakings, legal statements, or compliance declarations made by the applicant in the request letter, often related to regulations (FEMA, AML), transaction purpose, or applicant responsibility.
+            Look for sections: 'Declarations:', 'Undertakings:', or numbered/bulleted statements, usually before the signature. Extract full relevant text.
+            Example phrase: "I/We declare that this transaction complies with all applicable regulations..."
+        """},
+        {"name": "APPLICANT SIGNATURE",
+         "description": """Confirmation or evidence of the applicant's (or authorized signatory's) signature. Can be a signature image, typed signatory name, or textual confirmation like 'Authorized Signatory'.
+            Capture typed name if present, or note 'Signature Present'.
+            Example text: "For [Applicant Company Name], (Sign) John Smith, Managing Director" or "Signed for and on behalf of Applicant Corp".
+        """},
+        {"name": "APPLICANT NAME",
+         "description": """The full legal name of the individual or company submitting the request letter.
+            Look in letterhead, near applicant's address, or field 'Applicant Name:', 'Customer Name:'.
+            Example: "Local Importers LLC", "Alpha Trading Enterprises".
+        """},
+        {"name": "APPLICANT ADDRESS",
+         "description": """The complete mailing address of the applicant (street, city, state, postal code, country).
+            Usually in letterhead or under 'Applicant Address:'.
+            Example: "456 Business Park, Suite 101, Metro City, MC 67890, Localia".
+        """},
+        {"name": "APPLICANT COUNTRY",
+         "description": """The country where the applicant is officially located/registered. Typically part of applicant's address or explicitly stated.
+            Example: "India", "United Kingdom".
+        """},
+        {"name": "HS CODE",
+         "description": """The Harmonized System (HS) or HSN code, an international standard for classifying traded goods (usually 6-10 digits).
+            Look for 'HS Code:', 'HSN Code:', 'Tariff Code:'.
+            Example: "69072300" or "851762".
+        """},
+        {"name": "TYPE OF GOODS",
+         "description": """A general description of the merchandise or products being imported or paid for.
+            Look for 'Description of Goods:', 'Goods:', 'Nature of Goods:'.
+            Example: "Electronic Components for Manufacturing" or "Industrial Machinery Parts".
+        """},
+        {"name": "DEBIT ACCOUNT NO",
+         "description": """The applicant's bank account number from which the principal transaction funds will be debited.
+            Look for 'Debit Account No.:', 'Account to be Debited:', 'Source Account:'.
+            Example: "123456789012" or "00501000012345".
+        """},
+        {"name": "FEE ACCOUNT NO",
+         "description": """The applicant's account number for transaction fees, if different from the main debit account.
+            Look for 'Fee Account No.:', 'Charges Account:'. May be same as Debit Account No.
+            Example (if different): "987654321000".
+        """},
+        {"name": "LATEST SHIPMENT DATE",
+         "description": """The latest date by which goods must be shipped by the exporter, as per contract or L/C terms.
+            Look for 'Latest Shipment Date:', 'Shipment by:'. Format DD-MM-YYYY.
+            Example: "31-12-2024".
+        """},
+        {"name": "DISPATCH PORT",
+         "description": """The port, airport, or place from where goods are dispatched/shipped (Port of Loading).
+            Look for 'Port of Dispatch:', 'Port of Loading:', 'From Port:'.
+            Example: "Port of Hamburg" or "Shanghai Pudong Airport".
+        """},
+        {"name": "DELIVERY PORT",
+         "description": """The port, airport, or place where goods are to be delivered in the destination country (Port of Discharge).
+            Look for 'Port of Delivery:', 'Port of Discharge:', 'To Port:'.
+            Example: "Port of New York" or "Nhava Sheva Port".
+        """},
+        {"name": "FB CHARGES",
+         "description": """Indicates who bears foreign bank charges (BEN: Beneficiary, OUR: Applicant, SHA: Shared).
+            Look for 'Foreign Bank Charges:', 'Details of Charges:', often with options BEN/OUR/SHA.
+            Example: "BEN", "OUR".
+        """},
+        {"name": "INTERMEDIARY BANK NAME",
+         "description": """Name of any intermediary/correspondent bank used in the payment chain.
+            Look for 'Intermediary Bank:', 'Correspondent Bank:'. If not applicable, null.
+            Example: "Global Correspondent Bank PLC".
+        """},
+        {"name": "INTERMEDIARY BANK ADDRESS",
+         "description": """Address of the intermediary bank, if specified.
+            Example: "1 Financial Square, Global City, GC1 2XX, Interland".
+        """},
+        {"name": "INTERMEDIARY BANK COUNTRY",
+         "description": """Country of the intermediary bank.
+            Example: "Switzerland", "USA".
+        """},
+        {"name": "CUSTOMER SIGNATURE",
+         "description": """Confirmation or evidence of the customer's (applicant's or their authorized signatory's) signature on the request. This is synonymous with 'APPLICANT SIGNATURE'.
+            Can be an actual signature image, a typed name of the signatory, or textual confirmation like 'Authorized Signatory'. Capture typed name or note 'Signature Present'.
+            Example: "For [Customer Company Name], (Signed) Alice Brown, Finance Manager".
+        """},
+        {"name": "MODE OF REMITTANCE",
+         "description": """The method requested by the customer for making the payment to the beneficiary.
+            Look for 'Mode of Payment:', 'Payment Method:', 'Remit by:'.
+            Examples: "Telegraphic Transfer (TT)", "SWIFT Transfer", "Demand Draft (DD)".
+        """},
+        {"name": "COUNTRY OF ORIGIN",
+         "description": """The country where the goods being paid for were originally manufactured, produced, or grown. This might be stated in relation to the goods description. This is synonymous with 'COUNTRY OF ORIGIN OF GOODS'.
+            Look for 'Country of Origin:', 'Origin of Goods:', 'Made in:'.
+            Example: "China", "Germany", "Vietnam".
+        """},
+        {"name": "IMPORT LICENSE DETAILS",
+         "description": """Details of any specific import license or permit required for the goods, including the license number and possibly its validity or the issuing authority.
+            Look for 'Import Licence No.:', 'Permit Number:', 'Authorization Details:'. This may be more than just a number, potentially including date or type of license.
+            Example: "Licence No: IL/COMM/2024/00123, Valid until: 31-12-2024" or "DGFT License XYZ123".
+        """},
+        {"name": "CURRENCY AND AMOUNT OF REMITTANCE IN WORDS",
+         "description": """The total remittance amount written out in words, including the currency. (e.g., 'US Dollars One Hundred Thousand Only', 'EURO Twenty-One Thousand Seven Hundred Twelve and Cents Eighteen Only').
+            Look for labels like 'Amount in Words:', 'Sum of (Currency) in Words:'. Typically found near the numerical amount.
+            Example: "US DOLLARS FIFTY THOUSAND ONLY" or "EURO TEN THOUSAND FIVE HUNDRED AND FIFTY POINT TWENTY FIVE".
+        """},
+        {"name": "INVOICE NO",
+         "description": """The unique identification number of the Proforma or Commercial Invoice related to this remittance request, as issued by the beneficiary/exporter. This field is being extracted from the CRL where it references an invoice.
+            Look for labels in the CRL like 'Invoice No.:', 'Ref. Invoice:', 'Against Invoice No.:'.
+            Example: "PI-2024-001" or "EXPORTINV/789".
+        """},
+        {"name": "INVOICE DATE",
+         "description": """The date on which the referenced Proforma or Commercial Invoice (see 'INVOICE NO' field) was issued by the beneficiary/exporter. This field is being extracted from the CRL where it references an invoice.
+            Look for labels in the CRL like 'Invoice Date:', 'Date of Invoice:'.
+            Example: "10-07-2024" or "July 10, 2024".
+        """},
+        {"name": "INVOICE VALUE",
+         "description": """The total monetary value stated on the referenced Proforma or Commercial Invoice. This should align with the 'REMITTANCE AMOUNT' if the full invoice value is being paid via this CRL. This field is being extracted from the CRL where it references an invoice.
+            Look for labels in the CRL like 'Invoice Amount:', 'Invoice Total Value:', 'Value of Invoice:'.
+            Example: "21712.18" or "150000.00".
+        """},
+        {"name": "EXCHANGE RATE",
+         "description": """The exchange rate applied or requested for converting the remittance amount from one currency to another, if applicable (e.g., from local currency of debit account to the foreign currency of remittance).
+            Look for 'Exchange Rate:', 'Rate Applied:', 'FX Rate:'. May be specified by customer or bank.
+            Example: "1 USD = 83.50 INR" or "0.92 EUR/USD".
+        """},
+        {"name": "TREASURY REFERENCE NO",
+         "description": """A unique reference number for a foreign exchange (forex) deal booked with the bank's treasury to fix the exchange rate, if applicable. Similar to 'DEAL ID'.
+            Look for 'Treasury Ref No:', 'Forex Deal ID:', 'FX Contract No.:'.
+            Example: "TRSY/FX/2024/00567".
+        """},
+        {"name": "SPECIFIC REFERENCE FOR SWIFT FIELD 70/72",
+         "description": """Narrative or specific instructions the applicant wants to be included in the SWIFT payment message's Field 70 (Remittance Information) or Field 72 (Sender to Receiver Information). This often includes invoice numbers, purpose of payment, or other details for the beneficiary or beneficiary's bank.
+            Look for labels 'Payment Reference (for SWIFT F70):', 'Message to Beneficiary Bank (F72):', 'Narrative for Beneficiary:'. Extract the text provided.
+            Example: "/INV/PI-2024-001/ORDER/PO-ABC-123" or "PAYMENT FOR CONSULTANCY SERVICES AGREEMENT DATED 01-06-2024".
+        """},
+        {"name": "DESCRIPTION OF GOODS", 
+         "description": """A detailed account or specific description of the goods or services for which the payment is being made, as stated in the customer's request letter. This might be more detailed than 'TYPE OF GOODS' and directly quoted from the customer's application.
+            Look for sections like 'Description of Goods/Services:', 'Details of Import:', or a narrative part describing the items.
+            Example: "Supply and installation of Model X-500 Industrial Compressor and associated spare parts" or "Annual Subscription Fee for Cloud Software Platform".
+        """},
+        {"name": "TRANSACTION Product Code Selection",
+         "description": """A specific internal code or explicit selection by the applicant identifying the bank's financial product used for this transaction (e.g., 'Import Advance', 'Direct Import Bill').
+            Search for 'Product Code:', 'Transaction Product:', or a highlighted product name.
+            Example: "IMP-ADV-001" or "TF-PAY-SIGHT".
+            """},
+        {"name": "TRANSACTION EVENT",
+         "description": """Identifies the specific event in the transaction lifecycle (e.g., 'Payment Initiation', 'Remittance Issuance'). For CRL, this is typically the initiation of a payment instruction.
+            Often implicit. Look for explicit statements if any.
+            Example: "Outward Remittance Processing".
+            """},
+        {"name": "VALUE DATE",
+         "description": """The requested date for funds to be debited from applicant's account and/or credited to the beneficiary (effective settlement date).
+            Look for 'Value Date:', 'Settlement Date:', 'Debit Date:'.
+            Example: "17-07-2024" or "Spot".
+            """},
+        {"name": "INCO TERM",
+         "description": """The standardized three-letter trade term (e.g., FOB, CIF, EXW) defining buyer/seller responsibilities for delivery, costs, and risks, as mentioned in the CRL (often referencing sales contract/invoice).
+            Look for 'Incoterm:', 'Trade Term:', or terms like 'CIF (Port Name)'.
+            Example: "CIF (Destination Port)" or "EXW (Seller's Factory)".
+            """},
+        {"name": "THIRD PARTY EXPORTER NAME",
+         "description": """Name of a third-party exporter if goods are exported by an entity different from the main beneficiary receiving payment.
+            Look for 'Third Party Exporter:', 'Actual Exporter (if different):'. If not applicable, null.
+            Example: "Global Sourcing Agents Ltd.".
+        """},
+        {"name": "THIRD PARTY EXPORTER COUNTRY",
+         "description": """Country of the third-party exporter, if applicable.
+            Example: "Hong Kong".
+        """}
     ],
+    
     "INVOICE": [
         {
-            "name": "TYPE OF INVOICE - COMMERCIAL/PROFORMA/CUSTOMS/",
-            "description": """The explicit classification of the invoice document. Search for titles or phrases like 'COMMERCIAL INVOICE', 'PROFORMA INVOICE', 'TAX INVOICE', 'CUSTOMS INVOICE', or 'INVOICE'.
-                            If no explicit type is mentioned but it functions as a bill, infer 'COMMERCIAL' if it seems final for goods/services rendered.
-                            If it's preliminary (e.g., for quotation, pre-shipment, or to open an L/C), infer 'PROFORMA'.
-                            If it's specifically for customs purposes and includes details like HS codes and country of origin for declaration, infer 'CUSTOMS'.
-                            Look across all pages, especially in headers or titles. Example: 'PROFORMA INVOICE'[cite: 4]."""
+            "name": "TYPE OF INVOICE - COMMERCIAL/PROFORMA/CUSTOMS", 
+            "description": """The explicit classification of the invoice document based on its title and purpose.
+                            Search for prominent titles like 'COMMERCIAL INVOICE', 'PROFORMA INVOICE', 'TAX INVOICE', 'CUSTOMS INVOICE', 'INVOICE', 'PROFORMA', 'PI', 'PO'.
+                            - **COMMERCIAL INVOICE:** A final bill.
+                            - **PROFORMA/PERFORMA INVOICE:** A preliminary bill/quotation. 'Order Confirmation' or 'Sales Order' with full details may function as one.
+                            - **CUSTOMS INVOICE:** For customs authorities.
+                            Infer based on content if title is ambiguous. (Note: Standard spelling is 'Proforma').
+                            Example: "PROFORMA INVOICE" or "COMMERCIAL INVOICE".
+                            """
         },
         {
             "name": "INVOICE DATE",
@@ -139,13 +307,13 @@ DOCUMENT_FIELDS = {
                             Based on the address 'RICHMOND, IN 47374'[cite: 1], the country is implicitly USA. For 'Franklin Park, IL 60131'[cite: 27], it's also USA. Explicitly state "USA" if inferred from state codes like IN or IL."""
         },
         {
-            "name": "INVOICE CURRENCY", # Renamed from CURRENCY for clarity
+            "name": "INVOICE CURRENCY", 
             "description": """The specific currency in which the invoice amounts are denominated (e.g., USD, EUR, GBP, INR).
                             Look for currency symbols ($, €, £) or currency codes (USD, EUR) next to monetary values, especially the total amount.
                             Sometimes explicitly stated like 'All amounts in USD'. Example: 'USD' is appended to the amount '$135,750.00 USD'[cite: 3]."""
         },
         {
-            "name": "INVOICE AMOUNT/VALUE", # Renamed from AMOUNT for clarity
+            "name": "INVOICE AMOUNT/VALUE",
             "description": """The primary financial value of the invoice, typically the total sum of goods/services before certain taxes or after certain discounts, or the grand total if no other total is more prominent.
                             Search for terms like 'Total', 'Subtotal', 'Net Amount', 'Invoice Total', 'Grand Total'.
                             This should be a numerical value. Be careful to distinguish it from line item amounts if a clear overall total is present. Example: '$135,750.00'[cite: 3]."""
@@ -163,19 +331,19 @@ DOCUMENT_FIELDS = {
                             Example: 'Account #: 830769961' for both ACH and Wire[cite: 29]."""
         },
         {
-            "name": "BENEFICARY BANK", # Spelling from user
+            "name": "BENEFICIARY BANK",
             "description": """The name of the bank where the seller (beneficiary) holds their account.
                             Search for labels such as 'Bank Name', 'Beneficiary Bank', 'Bank', 'Payable to Bank'.
                             This is usually listed in the payment instructions or bank details section. Example: 'JPMorgan Chase'[cite: 29]."""
         },
         {
-            "name": "BENEFICAIRY BANK ADDRESS", # Spelling from user
+            "name": "BENEFICIARY BANK ADDRESS",
             "description": """The full mailing address of the seller's (beneficiary's) bank.
                             Look for this information near the beneficiary bank's name or within the 'Bank Details' section.
                             It should include street, city, and country. Example: 'New York, NY 10017'[cite: 29]."""
         },
         {
-            "name": "BENEFICAIRY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE/ROUTING NO", # Spelling from user, expanded
+            "name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE / ROUTING NO", # Spelling from user, expanded
             "description": """The unique identification code for the seller's (beneficiary's) bank. This could be a SWIFT/BIC code (for international payments),
                             ABA Routing Number (for US payments), Sort Code (UK), BSB (Australia), IFSC (India), etc.
                             Look for labels like 'SWIFT Code', 'BIC', 'ABA No.', 'Routing No.', 'IFSC', 'Sort Code', 'BSB'. Example: 'Swift Code: CHASUS33' or 'ABA (Routing) #: 071000013' (for ACH) or 'Bank Routing Number: 021000021' (for Wire)[cite: 29]. Prioritize SWIFT if available for international context, or the most relevant routing for the transaction type."""
@@ -261,7 +429,7 @@ DOCUMENT_FIELDS = {
                             This is more common on Commercial or Customs Invoices. May not be present on all Proformas. If not found, state null."""
         },
         {
-            "name": "Intermediary Bank ( Field 56)", # Existing field
+            "name": "Intermediary Bank (Field 56)", # Existing field
             "description": """Details of any intermediary bank (correspondent bank) that is used to route the payment from the buyer's bank to the seller's (beneficiary's) bank.
                             Often referred to by 'Field 56' in SWIFT messages. Look for labels like 'Intermediary Bank', 'Correspondent Bank', or specific SWIFT field references if available.
                             This may not always be present or required. If not found, state null."""
@@ -294,7 +462,7 @@ DOCUMENT_FIELDS = {
                             Example: 'TRANSCENDIA, INC'[cite: 1], or more specifically 'Transcendia, Inc. - Depository'[cite: 29]."""
         },
         {
-            "name": "Party Country ( Benefciary )", # Spelling from user
+            "name": "Party Country ( Beneficiary )", 
             "description": """The country where the beneficiary (seller/exporter) is located.
                             This is typically the country of the 'SELLER ADDRESS' or 'BENEFICIARY ADDRESS'.
                             Example: USA (inferred from IN [cite: 1] or IL [cite: 29])."""
@@ -306,7 +474,7 @@ DOCUMENT_FIELDS = {
                             Example: 'Beneficiary Bank' is implied for JPMorgan Chase[cite: 29]."""
         },
         {
-            "name": "Party Name (Beneficiary Bank )", # Existing field, space before closing parenthesis
+            "name": "Party Name ( Beneficiary Bank )", # Existing field, space before closing parenthesis
             "description": """The name of the bank that holds the account for the beneficiary (seller/exporter).
                             This is the same as 'BENEFICARY BANK'. Example: 'JPMorgan Chase'[cite: 29]."""
         },
@@ -377,70 +545,57 @@ CLASSIFICATION_PROMPT_TEMPLATE = """
 
 **Detailed Instructions for Classification:**
 
-1.  **Holistic Review:** Conduct a comprehensive examination of all pages. Pay close attention to titles, headings, recurring phrases, specific keywords, data tables, and the overall layout to discern the document's fundamental function.
-2.  **Content and Keyword Analysis:**
+1.  **Holistic Review:** Conduct a comprehensive examination of all pages. Pay close attention to titles, headings, recurring phrases, specific keywords (see below), data tables (e.g., itemized goods, payment details), and the overall layout to discern the document's fundamental function.
+2.  **Content and Keyword Analysis (Prioritize explicit titles and document structure):**
     * **INVOICE (Commercial, Proforma, Customs):**
-        * **Keywords:** Look for explicit titles like "Invoice", "Commercial Invoice", "Proforma Invoice", "Tax Invoice", "Customs Invoice". Also search for related terms such as "Bill", "Statement of Charges".
-        * **Core Fields:** Identify the presence of:
-            * A unique "Invoice Number" or "Invoice ID".
-            * Detailed "Seller" (or "Shipper", "Exporter", "Beneficiary", "From") and "Buyer" (or "Consignee", "Importer", "Bill To", "To") information (names, addresses).
-            * Line items detailing goods or services, including descriptions, quantities, unit prices, and total amounts per item.
+        * **Primary Keywords/Titles:** Search for explicit titles like "Invoice", "Commercial Invoice", "Proforma Invoice", "Tax Invoice", "Customs Invoice", "Proforma", "PI".
+        * **Supporting Keywords/Phrases:** "Fattura" (Italian), "Rechnung" (German), "Facture" (French), "Bill", "Statement of Charges". Documents titled "Order Confirmation", "Sales Contract", "Sales Order", "Sales Agreement", "Indent", "PO", "Purchase Order" can function as a **Proforma Invoice** if they provide full itemization, pricing, terms, and are used to initiate payment or L/C.
+        * **Core Structural Elements:**
+            * A unique "Invoice Number" or "Reference Number".
+            * Clear identification of "Seller" (or "Shipper", "Exporter", "Beneficiary", "From") and "Buyer" (or "Consignee", "Importer", "Bill To", "To") with names and addresses.
+            * Itemized list of goods or services: descriptions, quantities, unit prices, line totals.
             * A "Total Amount Due", "Grand Total", or similar aggregate financial sum.
-            * "Invoice Date" or "Date of Issue".
-            * Payment terms, bank details for payment.
+            * An "Invoice Date" or "Date of Issue" (a Proforma might use an "Order Date" or "Proforma Date").
+            * Payment terms (e.g., "Net 30", "Advance Payment") and often bank details for payment.
         * **Differentiation:**
-            * **Commercial Invoice:** Typically used for actual billing and payment for goods/services already shipped or rendered.
-            * **Proforma Invoice:** An estimate or quotation provided *before* goods are shipped or services rendered. Often states "Proforma Invoice" clearly. May lack a definitive "due date" in the same way a commercial invoice does and might be used for initiating a letter of credit.
-            * **Customs Invoice:** Specifically designed for customs clearance, detailing goods for import/export, values, HS codes, country of origin. May have specific fields required by customs authorities.
+            * **Commercial Invoice:** Typically a definitive bill for goods already shipped or services rendered; requests payment for a completed transaction part.
+            * **Proforma Invoice:** A preliminary quotation or bill issued *before* goods shipment or service completion. Used for buyer to arrange financing (like L/C), make a prepayment, or for customs pre-clearance. Often explicitly titled "Proforma Invoice".
+            * **Customs Invoice:** Specifically formatted for customs authorities, detailing goods for import/export, including values, HS codes, country of origin, package details, for duty assessment.
     * **CRL (Customer Request Letter) / Application:**
-        * **Keywords:** Search for terms like "Application for...", "Request for...", "Letter of Instruction", "To The Manager", "We request you to...".
-        * **Content Focus:** Look for explicit requests made to a bank or financial institution (e.g., "issue a Letter of Credit", "process a payment", "debit our account").
-        * **Parties:** Identifies an "Applicant" (the one making the request) and often a "Beneficiary" (the recipient of the transaction). Details of the transaction (amount, currency, purpose) are central.
-    * **PACKING_LIST:**
-        * **Keywords:** "Packing List", "Shipping List", "Delivery Note" (if it details package contents without prices).
-        * **Content Focus:** Emphasizes logistics and shipping details:
-            * Shipper/Consignee information.
-            * Detailed list of packages, marks and numbers on packages.
-            * Description of goods per package.
-            * Quantities, gross weight, net weight, and measurements (dimensions/volume) of packages.
-            * Typically *excludes* pricing information (unit prices, total invoice value).
-    * **BL (Bill of Lading) / Air Waybill / Transport Document:**
-        * **Keywords:** "Bill of Lading", "Air Waybill (AWB)", "Sea Waybill", "CMR Note", "Consignment Note".
-        * **Content Focus:** Acts as a receipt for shipment and a contract of carriage.
-            * Identifies Shipper, Consignee, Notify Party.
-            * Details of the carrier (vessel name, voyage number, flight number).
-            * Ports/places of loading and discharge/delivery.
-            * Description of goods, number of packages, weight, measurements.
-            * Freight terms (e.g., "Freight Prepaid", "Freight Collect").
-            * Date "Shipped on Board" or dispatch date.
-            * Terms and conditions of carriage, often on the reverse side.
-    * **(Add similar detailed hints and differentiators for other specific document types you define)**
-3.  **Primary Purpose Determination:** Based on the collective evidence from all pages and the indicators above, ascertain which single "Acceptable Document Type" most accurately represents the *overall primary purpose* of the document. Consider what action the document is intended to facilitate.
-4.  **Confidence Assessment:** Assign a confidence score based on the clarity and preponderance of evidence. High confidence comes from explicit titles and a strong match of multiple key indicators. Lower confidence if the type is inferred or indicators are ambiguous or conflicting.
+        * **Primary Keywords/Titles:** "Request Letter", "Application for [Bank Product/Service]", "Letter of Instruction", "Remittance Application", "Import Payment Request".
+        * **Supporting Keywords/Phrases:** Addressed "To The Manager, [Bank Name]", phrases like "We request you to...", "Kindly process the remittance for...", "Please debit our account...", "Letter of Undertaking".
+        * **Content Focus:** Formal, written instruction from a customer (Applicant) to their bank. Explicitly requests the bank to perform a financial transaction (e.g., "issue a Letter of Credit", "remit funds for import", "process an outward remittance", "make an advance payment"). Contains details of the transaction: amount, currency, purpose, beneficiary name and bank details. Applicant's account to be debited is usually specified. Often includes declarations and signature of the applicant.
+        * **Parties:** Clearly identifies an "Applicant" (customer) and a "Beneficiary" (recipient of funds).
+3.  **Primary Purpose Determination:** Based on the collective evidence from all pages (explicit titles being a strong indicator), the presence/absence of key fields, and the characteristic markers outlined above, ascertain which single "Acceptable Document Type" most accurately represents the *overall primary purpose* of the document. What is the document's core function or the action it is intended to facilitate?
+4.  **Confidence Assessment:** Assign a confidence score based on the clarity and preponderance of evidence.
+    * **High Confidence (0.90-1.00):** An explicit, unambiguous title matching an acceptable type (e.g., "COMMERCIAL INVOICE") AND the presence of most core fields/structural elements characteristic of that type. The document's purpose is very clear.
+    * **Medium Confidence (0.70-0.89):** The title might be generic (e.g., just "INVOICE" where it could be Commercial or Proforma) or the type is inferred (e.g., a Purchase Order acting as a Proforma Invoice based on its content). Core fields and structure strongly suggest a particular type, but some ambiguity or deviation exists. Or, a clear title but some expected key elements are missing or unclear.
+    * **Low Confidence (0.50-0.69):** Title is ambiguous, misleading, or absent. Content could align with multiple types, or is missing several key indicators for any single type, making classification difficult.
+    * **Very Low/Unknown (0.0-0.49):** Document does not appear to match any of the acceptable types based on available indicators, or is too fragmented/illegible for reliable classification.
 5.  **Output Format (Strict Adherence Required):**
     * Return ONLY a single, valid JSON object.
     * The JSON object must contain exactly three keys: `"classified_type"`, `"confidence"`, and `"reasoning"`.
     * `"classified_type"`: The determined document type string. This MUST be one of the "Acceptable Document Types". If, after thorough analysis, the document does not definitively match any acceptable type based on the provided indicators, use "UNKNOWN".
-    * `"confidence"`: A numerical score between 0.0 (highly uncertain/unknown) and 1.0 (very certain).
-    * `"reasoning"`: A concise but specific explanation for your classification. Reference key terms, field presence/absence, or structural elements observed across the document that led to your decision (e.g., "Document titled 'PROFORMA INVOICE' on page 1, contains seller/buyer details, itemized goods with prices, and payment terms consistent with a proforma invoice. Lacks 'Shipped on Board' date typical of a final commercial invoice post-shipment.").
+    * `"confidence"`: A numerical score between 0.0 and 1.0 (e.g., 0.95).
+    * `"reasoning"`: A concise but specific explanation for your classification. Reference explicit titles, key terms found (or absent), presence/absence of core fields, or structural elements that led to your decision (e.g., "Document explicitly titled 'PROFORMA INVOICE' on page 1. Contains seller/buyer, itemized goods with prices, total value, and payment terms. Serves as a preliminary bill for payment initiation."). If 'UNKNOWN', explain why (e.g., "Lacks clear title and key invoice fields like invoice number or distinct buyer/seller sections. Appears to be an internal statement not matching defined types.").
 
 **Example Output:**
-\`\`\`json
+```json
 {{
   "classified_type": "PROFORMA_INVOICE",
   "confidence": 0.98,
-  "reasoning": "Document explicitly titled 'PROFORMA INVOICE' on page 1[cite: 4]. Contains all typical proforma invoice elements: seller (Transcendia, INC [cite: 1]), buyer (Arrow Business Advisory Pvt. Ltd [cite: 4]), detailed product description ('HA Laminating Film' [cite: 3]), quantity, unit price, total value[cite: 3], and payment terms[cite: 3]. It serves as a preliminary bill before shipment."
+  "reasoning": "Document exhibits all core characteristics of a proforma invoice: details seller and buyer, lists specific goods with quantities and unit prices leading to a total amount, specifies payment terms ('50% advance...'), and indicates 'Ship Date TBD'. While not explicitly titled 'Proforma Invoice', its structure and content align perfectly with its function as a preliminary bill for initiating payment, akin to a sales order formatted for external use."
 }}
-\`\`\`
-**Important:** Your response must be ONLY the valid JSON object. No greetings, apologies, or any text outside the JSON structure.
+
+Important: Your response must be ONLY the valid JSON object. No greetings, apologies, or any text outside the JSON structure.
 """
 
 EXTRACTION_PROMPT_TEMPLATE = """
-**Your Role:** You are a highly meticulous and accurate AI Document Analysis Specialist. Your primary function is to extract structured data from business documents precisely according to instructions, with an extreme emphasis on the certainty of every character extracted.
+**Your Role:** You are a highly meticulous and accurate AI Document Analysis Specialist. Your primary function is to extract structured data from business documents precisely according to instructions, with an extreme emphasis on the certainty, verifiability, and contextual appropriateness of every character and field extracted.
 
-**Task:** Analyze the provided {num_pages} pages, which together constitute a single logical '{doc_type}' document associated with Case ID '{case_id}'. Carefully extract the specific data fields listed below. Use the provided descriptions to understand the context and meaning of each field within this document type. Consider all pages to find the most relevant and accurate information for each field. Pay close attention to the nuanced instructions in each field's description to differentiate similar concepts and locate information that may not be explicitly labeled but can be inferred from context or common document structures.
+**Task:** Analyze the provided {num_pages} pages, which together constitute a single logical '{doc_type}' document associated with Case ID '{case_id}'. Carefully extract the specific data fields listed below. Use the provided detailed descriptions to understand the context, meaning, typical location, expected format, and potential variations of each field within this document type. Consider all pages to find the most relevant and accurate information. Pay close attention to nuanced instructions, including differentiation between similar concepts and rules for inference or default values if specified.
 
-**Fields to Extract (Name and Description):**
+**Fields to Extract (Name and Detailed Description):**
 {field_list_str}
 
 **Output Requirements (Strict):**
@@ -449,89 +604,91 @@ EXTRACTION_PROMPT_TEMPLATE = """
 2.  **JSON Structure:** The JSON object MUST have keys corresponding EXACTLY to the field **names** provided in the "Fields to Extract" list above.
 3.  **Field Value Object:** Each value associated with a field key MUST be another JSON object containing the following three keys EXACTLY:
     * `"value"`: The extracted text value for the field.
-        * If the field is clearly present, extract the value with absolute precision, ensuring every character is accurately represented.
-        * If the field is **not found** or **not applicable** after thoroughly searching all pages and considering contextual clues as per the description, use the JSON value `null` (not the string "null").
-        * If multiple potential values exist, select the one that is most pertinent to the specific context of the field's description. If ambiguity persists even after contextual evaluation, this must be reflected in a lower confidence score and explained in the reasoning.
-        * For amounts, extract numerical values (e.g., "15000.75"). For dates, prefer a consistent format (e.g., YYYY-MM-DD or as it appears). Ensure no extraneous characters are included.
+        * If the field is clearly present, extract the value with absolute precision, ensuring every character is accurately represented and free of extraneous text/formatting (unless the formatting is part of the value, like a specific date format if ISO conversion is not possible).
+        * If the field is **not found** or **not applicable** after thoroughly searching all pages and considering contextual clues as per the field description, use the JSON value `null` (not the string "null").
+        * If multiple potential values exist (e.g., different addresses for a seller), select the one most pertinent to the field's specific context (e.g., 'Seller Address' for invoice issuance vs. 'Seller Corporate HQ Address' if the field specifically asks for that). Document ambiguity in reasoning.
+        * For amounts, extract numerical values (e.g., "15000.75", removing currency symbols or group separators like commas unless they are part of a regional decimal format that must be preserved). Currency is typically a separate field.
+        * For dates, if possible and certain, convert to ISO 8601 format (YYYY-MM-DD). If conversion is uncertain due to ambiguous source format (e.g., "01/02/03"), extract as it appears and note the ambiguity and original format in the reasoning.
+        * For multi-line addresses, concatenate lines into a single string, typically separated by a comma and space (e.g., "123 Main St, Anytown, ST 12345, Country").
 
-    * `"confidence"`: **Character-Informed Confidence Score (Strict)**
-        * **Core Principle:** The overall confidence score (float, 0.00 to 1.00) for each field MUST reflect the system's certainty about **every single character** comprising the extracted value. The field's confidence is heavily influenced by the *lowest* confidence assigned to any of its critical constituent characters or segments during the OCR/interpretation process. A field cannot have high confidence if even one character is questionable.
-        * **Calculation Basis:** This score integrates:
-            * OCR engine's internal character-level confidence values (if available).
-            * Visual clarity, print quality, and sharpness of each character in the source text segment.
-            * Ambiguity checks for similar characters (e.g., '0' vs 'O', '1' vs 'l' vs 'I', '5' vs 'S', '8' vs 'B'). Each instance must be critically evaluated.
-            * Legibility of handwriting (individual strokes, character formation, connections). Even if generally readable, individual poorly formed characters degrade confidence.
-            * Strict adherence of every character to the expected field format and context (e.g., an alphabetic character 'O' in a purely numeric field like an account number *drastically* lowers confidence unless it's an accepted part of the format).
-            * Cross-validation results where applicable (e.g., amount in words vs. numeric amount – discrepancies must lower confidence).
-        * **Strict Benchmarks:**
-            * **0.98 - 1.00 (Very High):** Absolute or near-absolute certainty. ALL characters are perfectly clear, sharp, unambiguous, flawlessly formed (print or ideal handwriting), and fully context-compliant. No plausible alternative interpretation exists for ANY character. This score implies that every character is deemed 100% recognizable.
-            * **0.90 - 0.97 (High):** Strong confidence, but not absolute perfection for every character. All characters are clearly legible and contextually sound, but minor visual imperfections (e.g., slight pixelation, tiny ink spread that doesn't cause ambiguity) might exist for one or two characters, OR extremely low-probability alternative character interpretations were considered but definitively ruled out by strong contextual evidence.
-            * **0.75 - 0.89 (Moderate):** Reasonable confidence, but with specific, identifiable uncertainties regarding one or more characters. This applies if:
-                * One or two characters have moderate ambiguity that required contextual resolution (e.g., a printed '8' that is slightly broken making it look like a '3' until context confirms '8').
-                * Minor OCR segmentation issues were overcome (e.g., slightly touching characters that were correctly separated but with effort).
-                * Legible but somewhat challenging handwriting style for a character or two (e.g., a cursive 'e' that is not perfectly closed).
-                * Slight fading or smudging on a few characters not critical to overall interpretation but preventing a "Very High" score.
-            * **0.50 - 0.74 (Low):** Significant uncertainty exists regarding multiple characters or critical parts of the value. This applies if:
-                * Several characters are ambiguous, poorly printed, or difficult to read.
-                * Poor print quality (significant fading, widespread smudging, pixelation) affects key characters.
-                * Irregular or barely legible handwriting is involved for a substantial portion of the value.
-                * Contextual conflicts exist that raise doubts about the accuracy of certain characters (e.g., a date field showing '31-Feb-2023').
-            * **< 0.50 (Very Low / Unreliable):** Extraction is highly speculative or impossible to perform reliably. The field value is likely incorrect, incomplete, or based on guesswork. Assign this if the text is largely illegible, completely missing, critical characters are indecipherable, or contextual validation fails insurmountably.
-        * If the `"value"` is `null`, the `"confidence"` MUST be `0.0`.
+    * `"confidence"`: **Granular Character-Informed, Contextual, and Source-Aware Confidence Score (Strict)**
+        * **Core Principle:** The overall confidence score (float, 0.00 to 1.00, recommend 2 decimal places) for each field MUST reflect the system's certainty about **every single character** of the extracted value, AND the **contextual correctness and verifiability** of that extraction. It's a holistic measure.
+        * **Key Factors Influencing Confidence:**
+            1.  **OCR Character Quality & Ambiguity:** Clarity and sharpness of each character (machine-print vs. handwriting). Low confidence for ambiguous characters (e.g., '0'/'O', '1'/'l'/'I', '5'/'S') unless context makes it near-certain.
+            2.  **Handwriting Legibility:** Clarity, consistency, and formation of handwritten characters.
+            3.  **Field Format Adherence:** How well the extracted value matches the expected data type and pattern (e.g., all digits for an account number, valid date structure, correct SWIFT code pattern). Deviations drastically lower confidence.
+            4.  **Label Presence & Quality:** Was the value found next to a clear, standard, unambiguous label matching the field description? (e.g., "Invoice No.:" vs. inferring from a poorly labeled column). Explicit, standard labels lead to higher confidence.
+            5.  **Positional Predictability:** Was the field found in a common, expected location for that document type versus an unusual one?
+            6.  **Contextual Plausibility & Consistency:** Does the value make sense for the field and in relation to other extracted fields? (e.g., a 'Latest Shipment Date' should not be before an 'Order Date'). Cross-validation (e.g., amount in words vs. numeric amount) consistency is key.
+            7.  **Completeness of Information:** If a field expects multiple components (e.g., full address) and parts are missing/illegible, this reduces confidence for the entire field.
+            8.  **Source Document Quality:** Overall document clarity, scan quality, skew, rotation, background noise, stamps/markings obscuring text.
+            9.  **Inference Level:** Was the value directly extracted or inferred? Higher degrees of inference lower confidence.
 
-    * `"reasoning"`: A concise explanation justifying the extracted `value` and `confidence` score.
-        * Specify *how* the information was identified (e.g., "Directly beside explicit label 'Invoice No.'", "Inferred from the 'SHIP TO:' address block").
-        * Indicate *where* the information was found (e.g., "on page 1, top right section", "page 5, under 'ACH & Wire Transfer Instructions'").
-        * **Mandatory for any confidence score below 0.98 (previously 0.95, increased for stricter regime):** Briefly explain the *primary reason* for the reduced confidence, referencing specific character ambiguities (e.g., "Value 'INV-0012O'; Moderate (0.85): Final character resembles 'O' but context suggests '0'; slight blur."), handwriting issues, print quality ("Value '123 Main St'; High (0.92): Slight fading on 'St' but legible."), or contextual conflicts. If 0.98-1.00, reasoning can be "All characters perfectly clear and contextually valid."
-        * If `"value"` is `null`, briefly explain *why* (e.g., "No explicit field label 'HS Code' or related tariff code information found on any page.").
+        * **Confidence Benchmarks (Stricter & More Granular):**
+            * **0.99 - 1.00 (Very High/Near Certain):** All characters perfectly clear, machine-printed, unambiguous. Value from an explicit, standard label in a predictable location. Perfect format match. Contextually validated and sound. No plausible alternative interpretation. (Example: A clearly printed Invoice Number next to "Invoice No.:" label).
+            * **0.95 - 0.98 (High):** Characters very clear and legible (excellent machine print or exceptionally neat handwriting). Minor, non-ambiguity-inducing visual imperfections. Strong label or unmistakable positional/contextual evidence. Correct format. Contextually valid. (Example: A clearly printed total amount next to "Grand Total:").
+            * **0.88 - 0.94 (Good):** Generally clear, but minor, identifiable factors prevent higher scores:
+                * One or two characters with slight ambiguity resolved with high confidence by context or pattern.
+                * Very clean, legible, and consistent handwriting.
+                * Information reliably extracted from structured tables with clear headers.
+                * Minor print defects (slight fading/smudging) not obscuring character identity.
+            * **0.75 - 0.87 (Moderate):** Value is legible and likely correct, but there are noticeable issues affecting certainty for some characters/segments, or some level of inference was required:
+                * Moderately clear handwriting with some variability or less common letter forms.
+                * Slightly blurry, pixelated, or faded print requiring careful interpretation for several characters.
+                * Value inferred from contextual clues or non-standard labels with reasonable, but not absolute, certainty. (e.g., identifying a "Beneficiary Bank" from a block of payment text without an explicit label).
+            * **0.60 - 0.74 (Low):** Significant uncertainty. Parts of the value are an educated guess, or the source is challenging:
+                * Poor print quality (significant fading, widespread smudging, pixelation) affecting key characters.
+                * Difficult or messy handwriting for a substantial portion of the value.
+                * High ambiguity for several characters or critical segments where context provides only weak support. Value inferred with significant assumptions or from unclear/damaged source text.
+            * **< 0.60 (Very Low / Unreliable):** Extraction is highly speculative or impossible to perform reliably. Value likely incorrect, incomplete, or based on guesswork. Text is largely illegible, critical characters are indecipherable, or contextual validation fails insurmountably.
+        * If `"value"` is `null` (field not found/applicable), `"confidence"` MUST be `0.0`.
 
-**Example of Expected JSON Output Structure (Reflecting Stricter Confidence):**
-(Note: The actual field names will match those provided in the 'Fields to Extract' list for the specific '{doc_type}')
+    * `"reasoning"`: A concise but specific explanation justifying the extracted `value` and the assigned `confidence` score. This is crucial for auditability and improvement.
+        * Specify *how* the information was identified (e.g., "Directly beside explicit label 'Invoice No.' on page 1.", "Inferred from the 'BILL TO:' address block on page 2 as buyer's name.", "Calculated sum of all line item totals from table on page 3.").
+        * Indicate *where* it was found (e.g., "Page 1, top right section.", "Page 3, under table column 'Description'.", "Page 5, section titled 'Payment Instructions'.").
+        * **Mandatory for any confidence score below 0.99:** Briefly explain the *primary factors* leading to the reduced confidence. Reference specific issues:
+            * Character ambiguity: "Value is 'INV-O012B'; Confidence 0.78: Second char 'O' could be '0', last char 'B' could be '8'; document slightly blurred in this area."
+            * Print/Scan Quality: "Value '123 Main Street'; Confidence 0.85: Slight fading on 'Street', making 'S' and 't' less than perfectly sharp."
+            * Handwriting: "Value 'Johnathan Doe'; Confidence 0.70: First name legible but 'Johnathan' has an unclear 'h' and 'n'; 'Doe' is clear."
+            * Inference/Labeling: "Value 'Global Exporters Inc.'; Confidence 0.90: Inferred as Seller Name from prominent placement in header, no explicit 'Seller:' label."
+            * Formatting Issues: "Value '15/07/2024'; Confidence 0.92: Date format DD/MM/YYYY clearly extracted; slight ink bleed around numbers."
+            * Contextual Conflict: "Value for 'Net Weight' is '1500 KG', but 'Gross Weight' is '1400 KG'; Confidence 0.60 for Net Weight due to inconsistency requiring review."
+        * If confidence is 0.99-1.00, reasoning can be succinct, e.g., "All characters perfectly clear, machine-printed, explicit standard label, contextually validated."
+        * If `"value"` is `null`, briefly explain *why* (e.g., "No field labeled 'HS Code' or any recognizable tariff code found on any page.", "The section for 'Intermediary Bank Details' was present but explicitly marked 'Not Applicable'.").
 
-\`\`\`json
+**Example of Expected JSON Output Structure (Reflecting Stricter Confidence & Generic Reasoning):**
+(Note: Actual field names will match those provided in the 'Fields to Extract' list for the specific '{doc_type}')
+
+```json
 {{
-  "TYPE OF INVOICE - COMMERCIAL/PROFORMA/CUSTOMS/": {{
-    "value": "PROFORMA INVOICE",
+  "INVOICE_NO": {{
+    "value": "INV-XYZ-789",
+    "confidence": 0.99,
+    "reasoning": "Extracted from explicit label 'Invoice #:' on page 1, header. All characters are machine-printed, clear, and unambiguous. Format matches typical invoice numbering."
+  }},
+  "BUYER_NAME": {{
+    "value": "Generic Trading Co.",
     "confidence": 1.00,
-    "reasoning": "Extracted from explicit title 'PROFORMA INVOICE' on page 1[cite: 4]. All characters are perfectly clear, printed, and contextually valid."
+    "reasoning": "Extracted from 'BILL TO:' section, page 1. All characters perfectly clear, machine-printed, standard label, contextually validated."
   }},
-  "INVOICE NO": {{
-    "value": "2546049",
-    "confidence": 0.99,
-    "reasoning": "Extracted from the field labeled 'Reference #' on page 1, top section[cite: 2]. All digits are clearly printed and unambiguous. Confidence just below 1.00 due to general possibility of OCR misread on any character, though none observed."
-  }},
-  "BUYER NAME": {{
-    "value": "Arrow Business Advisory Pvt. Ltd",
-    "confidence": 0.98,
-    "reasoning": "Extracted from 'BILL TO:' section on page 1[cite: 4]. All characters are clearly printed and well-defined. No ambiguities noted."
-  }},
-  "BUYER ADDRESS": {{
-    "value": "159 Mittal Industrial Estate Sanjay Building No. 5/B Marol Naka, Andheri (East) Mumbai - 400 059 India",
-    "confidence": 0.97,
-    "reasoning": "Extracted from the 'BILL TO:' section on page 1[cite: 4]. All characters are clearly printed. Confidence slightly reduced from maximum due to the density of text and potential for any single character to have micro-imperfections not immediately obvious but considered under strict character policy."
-  }},
-  "BENEFICAIRY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE/ROUTING NO": {{
-    "value": "CHASUS33",
-    "confidence": 0.99,
-    "reasoning": "Extracted from 'Swift Code: CHASUS33' under 'Wire Instructions' on page 5[cite: 29]. All characters are clearly printed and contextually valid as a SWIFT code."
-  }},
-  "PAYMENT TERMS": {{
-    "value": "50% advance and balance 50% after 60 days from the date of Bill of Lading (BL)",
-    "confidence": 0.96,
-    "reasoning": "Extracted from 'Payment Terms:' section on page 1[cite: 3]. Text is clearly printed. Small font size and length of text slightly increase potential for overlooked character-level OCR nuances, hence not 0.98+."
-  }},
-  "HS CODE": {{
+  "HS_CODE": {{
     "value": null,
     "confidence": 0.0,
-    "reasoning": "No explicit field label 'HS Code' or related tariff code information found on any page of the provided proforma invoice."
+    "reasoning": "No field labeled 'HS Code', 'HTS Code', or 'Tariff Code', nor any recognizable HS code pattern, found on any page of the document."
   }},
-  "Total Invoice Amount": {{
-    "value": "135750.00",
-    "confidence": 1.00,
-    "reasoning": "Value '$135,750.00 USD' found as the total extension on page 1[cite: 3]. All digits, decimal point, and surrounding currency indicators are perfectly clear and printed. Numerical part extracted."
+  "PAYMENT_TERMS": {{
+    "value": "Net 30 days from date of invoice",
+    "confidence": 0.98,
+    "reasoning": "Extracted from section labeled 'Payment Terms:' on page 2. Text is clearly printed and directly associated with a standard label. All characters legible."
+  }},
+  "DATE_AND_TIME_OF_RECEIPT_OF_DOCUMENT": {{
+    "value": "2024-07-16 11:25",
+    "confidence": 0.90,
+    "reasoning": "Date '16 JUL 2024' clearly visible in a bank's 'RECEIVED' stamp on page 1. Time '11:25' also part of the stamp, clearly printed. Converted date to ISO format. Confidence slightly below max due to typical minor imperfections in stamp quality."
   }}
   // ... (all other requested fields for the '{doc_type}' document would follow this structure)
 }}
-\`\`\`
+
+Important: Your response must be ONLY the valid JSON object. No greetings, apologies, or any text outside the JSON structure.
 """
 
