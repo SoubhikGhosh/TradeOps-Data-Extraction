@@ -31,21 +31,20 @@ from tenacity import (
     before_sleep_log,
     RetryError
 )
-import google.api_core.exceptions
 import logging
 
-# Define which exceptions to retry on
 RETRYABLE_EXCEPTIONS = (
     google.api_core.exceptions.ResourceExhausted,  # 429 Too Many Requests
     google.api_core.exceptions.ServiceUnavailable,  # 503 Service Unavailable
     google.api_core.exceptions.DeadlineExceeded,    # 504 Gateway Timeout
     google.api_core.exceptions.InternalServerError, # 500 Internal Server Error
     google.api_core.exceptions.Aborted,             # Aborted transaction
-    google.api_core.exceptions.NetworkError,        # Network connectivity issues
-    ConnectionError,                               # General connection issues
+    google.api_core.exceptions.TransportError,      # Network connectivity issues
+    google.api_core.exceptions.GatewayTimeout,      # Gateway timeout
+    google.api_core.exceptions.TooManyRequests,     # Another form of rate limiting
+    ConnectionError,                                # General connection issues
     TimeoutError                                    # Timeouts
 )
-
 def vertex_ai_retry_decorator(
     max_attempts=50, 
     min_wait_seconds=1, 
