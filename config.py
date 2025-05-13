@@ -12,6 +12,16 @@ LOCATION = "asia-south1"
 MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-pro-002") # Or gemini-1.5-flash / newer appropriate model
 API_ENDPOINT = f"{LOCATION}-aiplatform.googleapis.com" # Often not needed if default is correct
 
+# --- Supported File Types ---
+SUPPORTED_MIME_TYPES = {
+    "application/pdf": "PDF",
+    "image/png": "PNG", 
+    "image/jpeg": "JPEG",
+    "image/jpg": "JPEG"
+}
+
+SUPPORTED_FILE_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg"]
+
 # --- Safety Settings ---
 SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,

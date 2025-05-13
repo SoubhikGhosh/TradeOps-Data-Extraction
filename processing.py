@@ -7,6 +7,7 @@ import json
 import random  # Added for jitter in retry mechanism
 import time    # Added for sleep in retry mechanism
 import traceback  # Added for error tracing in retry mechanism
+import mimetypes  # Added for file type detection
 from pathlib import Path
 import pandas as pd
 from collections import defaultdict
@@ -19,7 +20,8 @@ import google.api_core.exceptions as google_exceptions  # Updated import for ret
 from config import (
     PROJECT_ID, LOCATION, API_ENDPOINT, MODEL_NAME, SAFETY_SETTINGS,
     DOCUMENT_FIELDS, MAX_WORKERS, TEMP_DIR, OUTPUT_FILENAME,
-    EXTRACTION_PROMPT_TEMPLATE, CLASSIFICATION_PROMPT_TEMPLATE # Import new template
+    EXTRACTION_PROMPT_TEMPLATE, CLASSIFICATION_PROMPT_TEMPLATE, # Import new template
+    SUPPORTED_MIME_TYPES, SUPPORTED_FILE_EXTENSIONS  # Import new configuration variables
 )
 from utils import log, parse_filename_for_grouping # Import new parsing function
 
@@ -34,9 +36,27 @@ except Exception as e:
     log.exception(f"FATAL: Failed to initialize Vertex AI or load model: {e}")
     raise
 
-PDF_MIME_TYPE = "application/pdf"
-
 # --- Helper Functions ---
+
+def get_mime_type(file_path):
+    """Determine the MIME type of a file based on its extension or content."""
+    # First check by extension
+    file_ext = os.path.splitext(file_path)[1].lower()
+    if file_ext in ['.pdf']:
+        return "application/pdf"
+    elif file_ext in ['.png']:
+        return "image/png"
+    elif file_ext in ['.jpg', '.jpeg']:
+        return "image/jpeg"
+    
+    # Fallback to mimetypes library
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if mime_type:
+        return mime_type
+    
+    # Default to application/octet-stream if we can't determine
+    log.warning(f"Could not determine mime type for {file_path}, defaulting to octet-stream")
+    return "application/octet-stream"
 
 @staticmethod
 def _call_vertex_ai_with_retry(
@@ -101,24 +121,33 @@ def _call_vertex_ai_with_retry(
             raise # Re-raise these errors immediately
 
 
-def _prepare_pdf_parts(pdf_files: List[Dict]) -> Tuple[List[Part], List[str]]:
-    """Prepares Vertex AI Part objects from a list of PDF file paths."""
+def _prepare_document_parts(document_files: List[Dict]) -> Tuple[List[Part], List[str]]:
+    """Prepares Vertex AI Part objects from a list of document file paths (PDF, PNG, JPEG)."""
     parts = []
     file_paths_for_log = []
     # Sort by page number just in case
-    pdf_files.sort(key=lambda x: x["page"])
-    for file_info in pdf_files:
-        pdf_path = file_info["path"]
-        file_paths_for_log.append(pdf_path.name)
+    document_files.sort(key=lambda x: x["page"])
+    for file_info in document_files:
+        file_path = file_info["path"]
+        file_paths_for_log.append(file_path.name)
         try:
-            with open(pdf_path, "rb") as f:
-                pdf_content = f.read()
-            parts.append(Part.from_data(data=pdf_content, mime_type=PDF_MIME_TYPE))
+            with open(file_path, "rb") as f:
+                file_content = f.read()
+            
+            # Determine the MIME type based on the file extension or content
+            mime_type = get_mime_type(file_path)
+            
+            # Check if the MIME type is supported
+            if mime_type not in SUPPORTED_MIME_TYPES:
+                log.warning(f"Unsupported file type: {mime_type} for file {file_path}")
+                continue
+                
+            parts.append(Part.from_data(data=file_content, mime_type=mime_type))
         except FileNotFoundError:
-            log.error(f"File not found during Vertex AI input prep: {pdf_path}")
+            log.error(f"File not found during Vertex AI input prep: {file_path}")
             return None, file_paths_for_log # Return None for parts on error
         except Exception as e:
-            log.error(f"Error reading file {pdf_path}: {e}")
+            log.error(f"Error reading file {file_path}: {e}")
             return None, file_paths_for_log # Return None for parts on error
     return parts, file_paths_for_log
 
@@ -166,14 +195,23 @@ def _parse_vertex_json_response(response: Any, context: str) -> Dict | None:
 
 # --- Stage 1: Grouping by Base Filename ---
 def _group_files_by_base_name(folder_path: Path) -> Dict[str, List[Dict]]:
-    """Groups PDF files in a folder by parsed base name and sorts by page number."""
+    """Groups document files (PDF, PNG, JPEG) in a folder by parsed base name and sorts by page number."""
     doc_groups = defaultdict(list)
-    for pdf_file in folder_path.glob('*.pdf'):
+    
+    # Build a pattern to match supported file extensions
+    pattern = '|'.join([ext.replace('.', '\\.') for ext in SUPPORTED_FILE_EXTENSIONS])
+    supported_file_pattern = f'.*({pattern})$'
+    
+    for doc_file in folder_path.glob('*'):
+        # Skip if not a file or not a supported extension
+        if not doc_file.is_file() or not re.match(supported_file_pattern, doc_file.name, re.IGNORECASE):
+            continue
+            
         try:
-            base_name, page_number = parse_filename_for_grouping(pdf_file.name)
-            doc_groups[base_name].append({"path": pdf_file, "page": page_number})
+            base_name, page_number = parse_filename_for_grouping(doc_file.name)
+            doc_groups[base_name].append({"path": doc_file, "page": page_number})
         except Exception as e:
-            log.warning(f"Error parsing filename {pdf_file.name} in {folder_path.name}: {e}. Skipping file.")
+            log.warning(f"Error parsing filename {doc_file.name} in {folder_path.name}: {e}. Skipping file.")
 
     # Sort pages within each document group
     for base_name in doc_groups:
@@ -182,19 +220,19 @@ def _group_files_by_base_name(folder_path: Path) -> Dict[str, List[Dict]]:
     log.debug(f"Grouped files by base_name for {folder_path.name}: { {k: len(v) for k, v in doc_groups.items()} }")
     return dict(doc_groups)
 
-def _classify_document_type(case_id: str, base_name: str, pdf_files: list, acceptable_types: list):
-    """Uses Vertex AI to classify the document type from a list of PDF pages."""
-    log.info(f"Starting classification for Case: {case_id}, Group: '{base_name}', Pages: {len(pdf_files)}")
+def _classify_document_type(case_id: str, base_name: str, document_files: list, acceptable_types: list):
+    """Uses Vertex AI to classify the document type from a list of document pages (PDF, PNG, JPEG)."""
+    log.info(f"Starting classification for Case: {case_id}, Group: '{base_name}', Pages: {len(document_files)}")
     context = f"Case: {case_id}, Group: '{base_name}' (Classification)" # Context for logging
 
-    if not pdf_files:
-        log.warning(f"No PDF files provided for {context}")
-        return {"error": "No PDF files provided"}
+    if not document_files:
+        log.warning(f"No document files provided for {context}")
+        return {"error": "No document files provided"}
 
-    parts, file_paths_for_log = _prepare_pdf_parts(pdf_files)
+    parts, file_paths_for_log = _prepare_document_parts(document_files)
     if parts is None:
-         log.error(f"Failed to prepare PDF parts for {context}")
-         return {"error": "Failed to prepare PDF parts"}
+         log.error(f"Failed to prepare document parts for {context}")
+         return {"error": "Failed to prepare document parts"}
 
     acceptable_types_str = "\n".join([f"- {atype}" for atype in acceptable_types])
     prompt = CLASSIFICATION_PROMPT_TEMPLATE.format(
@@ -230,23 +268,23 @@ def _classify_document_type(case_id: str, base_name: str, pdf_files: list, accep
 
 
 # --- Stage 3: Data Extraction ---
-def _extract_data_from_document(case_id: str, base_name: str, pdf_files: list, classified_doc_type: str, fields_to_extract: list):
+def _extract_data_from_document(case_id: str, base_name: str, document_files: list, classified_doc_type: str, fields_to_extract: list):
     """Uses Vertex AI Gemini model to extract data for a *classified* document type."""
-    log.info(f"Starting extraction for Case: {case_id}, Group: '{base_name}', Type: {classified_doc_type}, Pages: {len(pdf_files)}")
+    log.info(f"Starting extraction for Case: {case_id}, Group: '{base_name}', Type: {classified_doc_type}, Pages: {len(document_files)}")
     context = f"Case: {case_id}, Group: '{base_name}', Type: {classified_doc_type} (Extraction)"
 
-    if not pdf_files:
-        log.warning(f"No PDF files provided for {context}")
-        return {"error": "No PDF files provided for extraction"}
+    if not document_files:
+        log.warning(f"No document files provided for {context}")
+        return {"error": "No document files provided for extraction"}
     if not fields_to_extract:
         log.warning(f"No fields defined for extraction for type {classified_doc_type} in {context}")
         return {"error": f"No fields defined for type {classified_doc_type}"}
 
 
-    parts, file_paths_for_log = _prepare_pdf_parts(pdf_files)
+    parts, file_paths_for_log = _prepare_document_parts(document_files)
     if parts is None:
-         log.error(f"Failed to prepare PDF parts for {context}")
-         return {"error": "Failed to prepare PDF parts for extraction"}
+         log.error(f"Failed to prepare document parts for {context}")
+         return {"error": "Failed to prepare document parts for extraction"}
 
     # Prepare the field list string with descriptions for the extraction prompt
     field_list_str = "\n".join([f"- **{field_dict['name']}**: {field_dict['description']}" for field_dict in fields_to_extract])
@@ -326,12 +364,12 @@ def process_zip_file(zip_file_path: str):
             log.info(f"Performing initial file grouping for Case ID: {case_id}")
             initial_groups[case_id] = _group_files_by_base_name(case_folder)
             if not initial_groups[case_id]:
-                 log.warning(f"No processable PDF groups found in case folder: {case_id}")
+                 log.warning(f"No processable document groups found in case folder: {case_id}")
                  # Add a row indicating no docs found for this case
                  final_results_list.append({
                      "CASE_ID": case_id,
                      "GROUP_Basename": "N/A",
-                     "Processing_Status": "No processable PDF files found"
+                     "Processing_Status": "No processable document files found"
                  })
 
 
@@ -341,9 +379,9 @@ def process_zip_file(zip_file_path: str):
         acceptable_types.append("UNKNOWN") # Allow UNKNOWN as a valid classification response
 
         for case_id, groups in initial_groups.items():
-            for base_name, pdf_files in groups.items():
-                 if pdf_files: # Only classify if there are files
-                     classification_tasks.append((case_id, base_name, pdf_files, acceptable_types))
+            for base_name, document_files in groups.items():
+                 if document_files: # Only classify if there are files
+                     classification_tasks.append((case_id, base_name, document_files, acceptable_types))
 
         classification_results = {} # {(case_id, base_name): classification_dict or error_dict}
         if classification_tasks:
@@ -373,12 +411,12 @@ def process_zip_file(zip_file_path: str):
                 if classified_type and classified_type != "UNKNOWN" and classified_type in DOCUMENT_FIELDS:
                     fields_to_extract = DOCUMENT_FIELDS[classified_type]
                     if fields_to_extract: # Check if there are fields defined
-                        # Retrieve the original pdf_files list for this group
-                        pdf_files = initial_groups.get(case_id, {}).get(base_name)
-                        if pdf_files:
-                             extraction_tasks.append((case_id, base_name, pdf_files, classified_type, fields_to_extract))
+                        # Retrieve the original document_files list for this group
+                        document_files = initial_groups.get(case_id, {}).get(base_name)
+                        if document_files:
+                             extraction_tasks.append((case_id, base_name, document_files, classified_type, fields_to_extract))
                         else:
-                             log.error(f"Logic Error: PDF files not found for Case {case_id}, Group '{base_name}' during extraction task prep.")
+                             log.error(f"Logic Error: Document files not found for Case {case_id}, Group '{base_name}' during extraction task prep.")
                     else:
                          log.warning(f"No fields configured for extraction for classified type '{classified_type}' in Case {case_id}, Group '{base_name}'.")
                          # Store classification result, but mark as no extraction fields

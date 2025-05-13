@@ -7,7 +7,7 @@ import tempfile
 
 from utils import log, setup_logger
 from processing import process_zip_file # This now uses the new workflow
-from config import TEMP_DIR
+from config import TEMP_DIR, SUPPORTED_FILE_EXTENSIONS
 
 # Ensure temp processing directory exists
 os.makedirs(TEMP_DIR, exist_ok=True)
@@ -31,7 +31,7 @@ def cleanup_file(file_path: str):
 @app.post("/process-zip/", response_class=FileResponse)
 async def create_upload_file(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     """
-    Accepts a ZIP file containing case folders with PDFs.
+    Accepts a ZIP file containing case folders with document files (PDF, PNG, JPEG).
     Processes them using Vertex AI (Classification then Extraction).
     Returns an Excel spreadsheet with extracted data, confidence, and reasoning.
     """
@@ -90,7 +90,11 @@ async def create_upload_file(background_tasks: BackgroundTasks, file: UploadFile
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the Document Processing API (v2 - Classify then Extract). Use the /process-zip/ endpoint."}
+    return {
+        "message": "Welcome to the Document Processing API (v2.1 - Multiformat Document Extraction)",
+        "supported_formats": f"PDF, PNG, JPEG files are supported for processing",
+        "endpoint": "Use the /process-zip/ endpoint to upload your ZIP file containing documents"
+    }
 
 # --- To run the server ---
 # uvicorn main:app --reload --host 0.0.0.0 --port 8000

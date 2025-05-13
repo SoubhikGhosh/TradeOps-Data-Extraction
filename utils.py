@@ -2,7 +2,9 @@
 import logging
 import sys
 import re # Keep re for filename parsing
-from config import LOG_FILE, LOG_LEVEL
+import os # Added for file extension operations
+from pathlib import Path
+from config import LOG_FILE, LOG_LEVEL, SUPPORTED_FILE_EXTENSIONS
 
 def setup_logger():
     """Configures and returns a logger."""
@@ -29,13 +31,28 @@ def clean_filename(filename):
     """Removes problematic characters for file paths."""
     return "".join(c for c in filename if c.isalnum() or c in (' ', '.', '-', '_')).rstrip()
 
+def is_supported_file_type(filename):
+    """Checks if a file has a supported extension."""
+    _, ext = os.path.splitext(filename)
+    return ext.lower() in [ext.lower() for ext in SUPPORTED_FILE_EXTENSIONS]
+
 def parse_filename_for_grouping(filename):
     """
     Parses filename to extract a base name for grouping and a page number.
     Handles patterns like 'Name 1.pdf', 'Name_1.pdf', 'NamePage1.pdf', 'Name1.pdf', 'Name.pdf'
+    Works with any supported file extension (PDF, PNG, JPEG)
     Returns: (base_name, page_number)
     """
-    name_no_ext = filename.rsplit('.', 1)[0]
+    # Get file extension
+    name_with_ext = Path(filename).name
+    name_parts = name_with_ext.rsplit('.', 1)
+    
+    if len(name_parts) == 2:
+        name_no_ext, ext = name_parts
+    else:
+        name_no_ext = name_parts[0]
+        ext = ""
+    
     page_number = 1 # Default page number
     base_name = name_no_ext # Default base name
 
@@ -69,6 +86,6 @@ def parse_filename_for_grouping(filename):
         log.warning(f"Could not determine valid base name for '{filename}', using '{base_name}'.")
 
     # Uncomment the line below temporarily to see exactly how filenames are parsed
-    log.info(f"Parsed Filename: '{filename}' -> Base Name: '{base_name}', Page: {page_number}")
+    log.debug(f"Parsed Filename: '{filename}' -> Base Name: '{base_name}', Page: {page_number}")
 
     return base_name, page_number
