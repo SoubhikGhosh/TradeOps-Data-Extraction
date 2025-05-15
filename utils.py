@@ -1,60 +1,72 @@
 # utils.py
 import logging
 import sys
-import re # Keep re for filename parsing
-import os # Added for file extension operations
+import re
+import os
 from pathlib import Path
-from config import LOG_FILE, LOG_LEVEL, SUPPORTED_FILE_EXTENSIONS
+
+# Import the centralized settings object
+from config import settings
 
 def setup_logger():
-    """Configures and returns a logger."""
+    """Configures and returns a logger based on settings."""
     logger = logging.getLogger("DocProcessor")
-    logger.setLevel(LOG_LEVEL)
+    # Use LOG_LEVEL from settings, converting string to logging level
+    log_level_int = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+    logger.setLevel(log_level_int)
+
     if logger.hasHandlers():
         logger.handlers.clear()
+
     stdout_handler = logging.StreamHandler(sys.stdout)
-    stdout_handler.setLevel(LOG_LEVEL)
-    file_handler = logging.FileHandler(LOG_FILE, mode='a')
-    file_handler.setLevel(LOG_LEVEL)
+    stdout_handler.setLevel(log_level_int)
+
+    # Use LOG_FILE from settings
+    log_file_path = settings.LOG_FILE
+    # Ensure log directory exists
+    log_file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_handler = logging.FileHandler(log_file_path, mode='a')
+    file_handler.setLevel(log_level_int)
+
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(processName)s - %(threadName)s - %(message)s'
     )
     stdout_handler.setFormatter(formatter)
     file_handler.setFormatter(formatter)
+
     logger.addHandler(stdout_handler)
     logger.addHandler(file_handler)
     return logger
 
+# Initialize logger (it will now use settings)
 log = setup_logger()
 
-def clean_filename(filename):
+def clean_filename(filename: str) -> str:
     """Removes problematic characters for file paths."""
     return "".join(c for c in filename if c.isalnum() or c in (' ', '.', '-', '_')).rstrip()
 
-def is_supported_file_type(filename):
-    """Checks if a file has a supported extension."""
+def is_supported_file_type(filename: str) -> bool:
+    """Checks if a file has a supported extension using settings."""
     _, ext = os.path.splitext(filename)
-    return ext.lower() in [ext.lower() for ext in SUPPORTED_FILE_EXTENSIONS]
+    return ext.lower() in [e.lower() for e in settings.SUPPORTED_FILE_EXTENSIONS]
 
-def parse_filename_for_grouping(filename):
+def parse_filename_for_grouping(filename: str) -> tuple[str, int]:
     """
     Parses filename to extract a base name for grouping and a page number.
     Handles patterns like 'Name 1.pdf', 'Name_1.pdf', 'NamePage1.pdf', 'Name1.pdf', 'Name.pdf'
     Works with any supported file extension (PDF, PNG, JPEG)
     Returns: (base_name, page_number)
     """
-    # Get file extension
     name_with_ext = Path(filename).name
     name_parts = name_with_ext.rsplit('.', 1)
-    
+
     if len(name_parts) == 2:
-        name_no_ext, ext = name_parts
+        name_no_ext, _ = name_parts # ext is not used here
     else:
         name_no_ext = name_parts[0]
-        ext = ""
-    
-    page_number = 1 # Default page number
-    base_name = name_no_ext # Default base name
+
+    page_number = 1  # Default page number
+    base_name = name_no_ext  # Default base name
 
     # Regex Explanation:
     # (?:[ _]|Page)? : Optionally matches a separator (space, underscore, or 'Page'). Non-capturing group.
@@ -66,26 +78,15 @@ def parse_filename_for_grouping(filename):
         potential_page_number_str = match.group(1)
         potential_base_name = name_no_ext[:match.start()]
 
-        # Check if the part before the number is non-empty. Avoids classifying "1.pdf" as base="" page=1.
-        # Also check if the base name itself ends with a number, which might indicate name1 vs name 1 pattern.
-        if potential_base_name: # Ensure base name is not empty
-             page_number = int(potential_page_number_str)
-             base_name = potential_base_name.strip(' _') # Clean trailing separators
-        # If potential_base_name is empty, it means the filename was just digits (e.g., "1.pdf")
-        # Keep the default base_name = name_no_ext and page_number = 1 in this edge case,
-        # or handle specifically if needed:
-        # elif name_no_ext.isdigit():
-        #    base_name = f"doc_{name_no_ext}" # Or keep as is
-        #    page_number = int(name_no_ext)
+        if potential_base_name:
+            page_number = int(potential_page_number_str)
+            base_name = potential_base_name.strip(' _')
+        # elif name_no_ext.isdigit(): # Edge case: filename is just digits like "1.pdf"
+            # base_name = f"doc_{name_no_ext}" # Or keep as is, current logic handles it by default
 
-    # If no page pattern matched, the defaults (full name_no_ext as base_name, page 1) are used.
-
-    # Final safety check for empty base name
-    if not base_name:
+    if not base_name: # Final safety check
         base_name = "unknown_doc"
         log.warning(f"Could not determine valid base name for '{filename}', using '{base_name}'.")
 
-    # Uncomment the line below temporarily to see exactly how filenames are parsed
     log.debug(f"Parsed Filename: '{filename}' -> Base Name: '{base_name}', Page: {page_number}")
-
     return base_name, page_number
