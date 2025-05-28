@@ -33,8 +33,9 @@ SAFETY_SETTINGS = {
 # --- Document Field Definitions with Descriptions ---
 DOCUMENT_FIELDS = {
     "CRL": [
-        {"name": "DATE & TIME OF RECEIPT OF DOCUMENT",
-         "description": """
+        {
+            "name": "DATE & TIME OF RECEIPT OF DOCUMENT",
+            "description": """
             **Objective:** Analyze the provided document image to locate a specific circular seal and accurately extract the date and time indicated by it. Time extraction must be precise, based on the **leading edge** of the arrow pointer and the 24-slot/4-segment time mechanism, including a specific rule for alignment with major hour lines. Extraneous text on the seal not directly part of the date or time scale markings should be ignored for date/time determination.
 
             **Seal Description:**
@@ -83,219 +84,279 @@ DOCUMENT_FIELDS = {
             **Output:**
             * Provide the extracted **Date** and extracted **Time** in DD-MM-YYYY HH:MM format (24-hour clock).
             * If, despite best efforts for exact rule application, a significant visual ambiguity required a judgment call (e.g., pointer edge extremely close to a line, making Case A vs. Case B decision difficult), briefly note this.
-        """},
-        {"name": "CUSTOMER REQUEST LETTER DATE",
-         "description": """The specific date on which the customer (applicant) formally prepared and dated their request letter or application form. Typically found in the letter's header, near applicant details, often labeled 'Date:' or 'Dated:'. This is the letter's authorship date by the customer.
+        """
+        },
+        {
+            "name": "CUSTOMER REQUEST LETTER DATE",
+            "description": """The specific date on which the customer (applicant) formally prepared and dated their request letter or application form. Typically found in the letter's header, near applicant details, often labeled 'Date:' or 'Dated:'. This is the letter's authorship date by the customer.
             Example: "03-10-2023" or "October 3, 2023".
-        """},
-        {"name": "BENEFICIARY NAME",
-         "description": """The full, official legal name of the party (exporter, seller, service provider) designated to receive funds or benefit from the transaction.
+        """
+        },
+        {
+            "name": "BENEFICIARY NAME",
+            "description": """The full, official legal name of the party (exporter, seller, service provider) designated to receive funds or benefit from the transaction.
             Look for labels: 'Beneficiary:', 'Beneficiary Name:', 'Payee:', 'To (Beneficiary):', 'Supplier Name:'. Extract complete name including legal suffixes (Ltd., Inc.).
             Example: "Global Export Services Ltd." or "Jane Doe International".
-        """},
-        {"name": "BENEFICIARY ADDRESS",
-         "description": """The complete mailing address of the beneficiary, including street, city, state/province, postal code. Found below/next to beneficiary name or in a 'Beneficiary Details' section. Extract as a single string.
+        """
+        },
+        {
+            "name": "BENEFICIARY ADDRESS",
+            "description": """The complete mailing address of the beneficiary, including street, city, state/province, postal code. Found below/next to beneficiary name or in a 'Beneficiary Details' section. Extract as a single string.
             Example: "123 International Parkway, Suite 500, Export City, EC 12345, Globalia".
-        """},
-        {"name": "BENEFICIARY COUNTRY",
-         "description": """The country where the beneficiary is officially located. Often the last part of the beneficiary's address or labeled 'Country:'.
+        """
+        },
+        {
+            "name": "BENEFICIARY COUNTRY",
+            "description": """The country where the beneficiary is officially located. Often the last part of the beneficiary's address or labeled 'Country:'.
             Example: "Germany", "Singapore".
-        """},
-        {"name": "REMITTANCE CURRENCY",
-         "description": """The three-letter ISO 4217 currency code (e.g., USD, EUR, INR) of the funds requested for remittance.
+        """
+        },
+        {
+            "name": "REMITTANCE CURRENCY",
+            "description": """The three-letter ISO 4217 currency code (e.g., USD, EUR, INR) of the funds requested for remittance.
             Look for labels: 'Currency:', 'CCY:', 'Transaction Currency:', or a code next to the amount.
             Example: "USD", "EUR".
-        """},
-        {"name": "REMITTANCE AMOUNT",
-         "description": """The principal monetary value of the transaction requested, in the specified 'REMITTANCE CURRENCY'.
+        """
+        },
+        {
+            "name": "REMITTANCE AMOUNT",
+            "description": """The principal monetary value of the transaction requested, in the specified 'REMITTANCE CURRENCY'.
             Look for labels: 'Amount:', 'Transaction Amount:', 'Value:'. Extract as a numerical value (e.g., "21712.18").
             Example: "50000.00" or "12345.67".
-        """},
-        {"name": "BENEFICIARY ACCOUNT NO / IBAN",
-         "description": """The beneficiary's bank account number or International Bank Account Number (IBAN) for fund credit.
+        """
+        },
+        {
+            "name": "BENEFICIARY ACCOUNT NO / IBAN",
+            "description": """The beneficiary's bank account number or International Bank Account Number (IBAN) for fund credit.
             Look for labels: 'Account No.:', 'A/C No.:', 'IBAN:', in 'Payment Instructions' or 'Beneficiary Bank Details'. IBANs start with a two-letter country code.
             Example (IBAN): "DE89370400440532013000" or (Account No.): "001-234567-890".
-        """},
-        {"name": "BENEFICIARY BANK", 
-         "description": """The full official name of the bank where the beneficiary holds their account.
+        """
+        },
+        {
+            "name": "BENEFICIARY BANK", 
+            "description": """The full official name of the bank where the beneficiary holds their account.
             Look for labels: 'Beneficiary Bank:', 'Bank Name:', 'Receiving Bank:'. Usually listed near account number and SWIFT code.
             (Note: Correct common spelling is 'Beneficiary Bank').
             Example: "Global Standard Commercial Bank", "Exporter's First Union Bank".
-        """},
-        {"name": "BENEFICIARY BANK ADDRESS",
-         "description": """The full mailing address of the beneficiary's bank, including street, city, and country.
+        """
+        },
+        {
+            "name": "BENEFICIARY BANK ADDRESS",
+            "description": """The full mailing address of the beneficiary's bank, including street, city, and country.
             Found with other beneficiary bank details. (Note: Correct common spelling is 'Beneficiary Bank Address').
             Example: "789 Finance Avenue, Central Banking District, Capital City, CB 67890, Globalia".
-        """},
-        {"name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE", 
-         "description": """Unique identification code of the beneficiary's bank/branch (SWIFT/BIC, Sort Code, BSB, IFSC, etc.).
+        """
+        },
+        {
+            "name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE", 
+            "description": """Unique identification code of the beneficiary's bank/branch (SWIFT/BIC, Sort Code, BSB, IFSC, etc.).
             Look for 'SWIFT Code:', 'BIC:', 'IFSC:', 'Sort Code:', 'BSB:'. (Note: Correct common spelling is 'Beneficiary Bank SWIFT Code...').
             Example (SWIFT): "BANKGB2LXXX" or (IFSC): "BKID0001234".
-        """},
-        {"name": "STANDARD DECLARATIONS AS PER PRODUCTS",
-         "description": """Any standard clauses, undertakings, legal statements, or compliance declarations made by the applicant in the request letter, often related to regulations (FEMA, AML), transaction purpose, or applicant responsibility.
+        """
+        },
+        {
+            "name": "STANDARD DECLARATIONS AS PER PRODUCTS",
+            "description": """Any standard clauses, undertakings, legal statements, or compliance declarations made by the applicant in the request letter, often related to regulations (FEMA, AML), transaction purpose, or applicant responsibility.
             Look for sections: 'Declarations:', 'Undertakings:', or numbered/bulleted statements, usually before the signature. Extract full relevant text.
             Example phrase: "I/We declare that this transaction complies with all applicable regulations..."
-        """},
-        {"name": "APPLICANT SIGNATURE",
-         "description": """Confirmation or evidence of the applicant's (or authorized signatory's) signature. Can be a signature image, typed signatory name, or textual confirmation like 'Authorized Signatory'.
+        """
+        },
+        {
+            "name": "APPLICANT SIGNATURE",
+            "description": """Confirmation or evidence of the applicant's (or authorized signatory's) signature. Can be a signature image, typed signatory name, or textual confirmation like 'Authorized Signatory'.
             Capture typed name if present, or note 'Signature Present'.
             Example text: "For [Applicant Company Name], (Sign) John Smith, Managing Director" or "Signed for and on behalf of Applicant Corp".
-        """},
-        {"name": "APPLICANT NAME",
-         "description": """The full legal name of the individual or company submitting the request letter.
+        """
+        },
+        {
+            "name": "APPLICANT NAME",
+            "description": """The full legal name of the individual or company submitting the request letter.
             Look in letterhead, near applicant's address, or field 'Applicant Name:', 'Customer Name:'.
             Example: "Local Importers LLC", "Alpha Trading Enterprises".
-        """},
-        {"name": "APPLICANT ADDRESS",
-         "description": """The complete mailing address of the applicant (street, city, state, postal code, country).
+        """
+        },
+        {
+            "name": "APPLICANT ADDRESS",
+            "description": """The complete mailing address of the applicant (street, city, state, postal code, country).
             Usually in letterhead or under 'Applicant Address:'.
             Example: "456 Business Park, Suite 101, Metro City, MC 67890, Localia".
-        """},
-        {"name": "APPLICANT COUNTRY",
-         "description": """The country where the applicant is officially located/registered. Typically part of applicant's address or explicitly stated.
+        """
+        },
+        {
+            "name": "APPLICANT COUNTRY",
+            "description": """The country where the applicant is officially located/registered. Typically part of applicant's address or explicitly stated.
             Example: "India", "United Kingdom".
-        """},
-        {"name": "HS CODE",
-         "description": """The Harmonized System (HS) or HSN code, an international standard for classifying traded goods (usually 6-10 digits).
+        """
+        },
+        {
+            "name": "HS CODE",
+            "description": """The Harmonized System (HS) or HSN code, an international standard for classifying traded goods (usually 6-10 digits).
             Look for 'HS Code:', 'HSN Code:', 'Tariff Code:'.
             Example: "69072300" or "851762".
         """},
-        {"name": "TYPE OF GOODS",
-         "description": """A general description of the merchandise or products being imported or paid for.
+        {
+            "name": "TYPE OF GOODS",
+            "description": """A general description of the merchandise or products being imported or paid for.
             Look for 'Description of Goods:', 'Goods:', 'Nature of Goods:'.
             Example: "Electronic Components for Manufacturing" or "Industrial Machinery Parts".
         """},
-        {"name": "DEBIT ACCOUNT NO",
-         "description": """The applicant's bank account number from which the principal transaction funds will be debited.
+        {
+            "name": "DEBIT ACCOUNT NO",
+            "description": """The applicant's bank account number from which the principal transaction funds will be debited.
             Look for 'Debit Account No.:', 'Account to be Debited:', 'Source Account:'.
             Example: "123456789012" or "00501000012345".
         """},
-        {"name": "FEE ACCOUNT NO",
-         "description": """The applicant's account number for transaction fees, if different from the main debit account.
+        {
+            "name": "FEE ACCOUNT NO",
+            "description": """The applicant's account number for transaction fees, if different from the main debit account.
             Look for 'Fee Account No.:', 'Charges Account:'. May be same as Debit Account No.
             Example (if different): "987654321000".
         """},
-        {"name": "LATEST SHIPMENT DATE",
-         "description": """The latest date by which goods must be shipped by the exporter, as per contract or L/C terms.
+        {
+            "name": "LATEST SHIPMENT DATE",
+            "description": """The latest date by which goods must be shipped by the exporter, as per contract or L/C terms.
             Look for 'Latest Shipment Date:', 'Shipment by:'. Format DD-MM-YYYY.
             Example: "31-12-2024".
         """},
-        {"name": "DISPATCH PORT",
-         "description": """The port, airport, or place from where goods are dispatched/shipped (Port of Loading).
+        {
+            "name": "DISPATCH PORT",
+            "description": """The port, airport, or place from where goods are dispatched/shipped (Port of Loading).
             Look for 'Port of Dispatch:', 'Port of Loading:', 'From Port:'.
             Example: "Port of Hamburg" or "Shanghai Pudong Airport".
         """},
-        {"name": "DELIVERY PORT",
-         "description": """The port, airport, or place where goods are to be delivered in the destination country (Port of Discharge).
+        {
+            "name": "DELIVERY PORT",
+            "description": """The port, airport, or place where goods are to be delivered in the destination country (Port of Discharge).
             Look for 'Port of Delivery:', 'Port of Discharge:', 'To Port:'.
             Example: "Port of New York" or "Nhava Sheva Port".
         """},
-        {"name": "FB CHARGES",
-         "description": """Indicates who bears foreign bank charges (BEN: Beneficiary, OUR: Applicant, SHA: Shared).
+        {
+            "name": "FB CHARGES",
+            "description": """Indicates who bears foreign bank charges (BEN: Beneficiary, OUR: Applicant, SHA: Shared).
             Look for 'Foreign Bank Charges:', 'Details of Charges:', often with options BEN/OUR/SHA.
             Example: "BEN", "OUR".
         """},
-        {"name": "INTERMEDIARY BANK NAME",
-         "description": """Name of any intermediary/correspondent bank used in the payment chain.
+        {
+            "name": "INTERMEDIARY BANK NAME",
+            "description": """Name of any intermediary/correspondent bank used in the payment chain.
             Look for 'Intermediary Bank:', 'Correspondent Bank:'. If not applicable, null.
             Example: "Global Correspondent Bank PLC".
         """},
-        {"name": "INTERMEDIARY BANK ADDRESS",
-         "description": """Address of the intermediary bank, if specified.
+        {
+            "name": "INTERMEDIARY BANK ADDRESS",
+            "description": """Address of the intermediary bank, if specified.
             Example: "1 Financial Square, Global City, GC1 2XX, Interland".
         """},
-        {"name": "INTERMEDIARY BANK COUNTRY",
-         "description": """Country of the intermediary bank.
+        {
+            "name": "INTERMEDIARY BANK COUNTRY",
+            "description": """Country of the intermediary bank.
             Example: "Switzerland", "USA".
         """},
-        {"name": "CUSTOMER SIGNATURE",
-         "description": """Confirmation or evidence of the customer's (applicant's or their authorized signatory's) signature on the request. This is synonymous with 'APPLICANT SIGNATURE'.
+        {
+            "name": "CUSTOMER SIGNATURE",
+            "description": """Confirmation or evidence of the customer's (applicant's or their authorized signatory's) signature on the request. This is synonymous with 'APPLICANT SIGNATURE'.
             Can be an actual signature image, a typed name of the signatory, or textual confirmation like 'Authorized Signatory'. Capture typed name or note 'Signature Present'.
             Example: "For [Customer Company Name], (Signed) Alice Brown, Finance Manager".
         """},
-        {"name": "MODE OF REMITTANCE",
-         "description": """The method requested by the customer for making the payment to the beneficiary.
+        {
+            "name": "MODE OF REMITTANCE",
+            "description": """The method requested by the customer for making the payment to the beneficiary.
             Look for 'Mode of Payment:', 'Payment Method:', 'Remit by:'.
             Examples: "Telegraphic Transfer (TT)", "SWIFT Transfer", "Demand Draft (DD)".
         """},
-        {"name": "COUNTRY OF ORIGIN",
-         "description": """The country where the goods being paid for were originally manufactured, produced, or grown. This might be stated in relation to the goods description. This is synonymous with 'COUNTRY OF ORIGIN OF GOODS'.
+        {
+            "name": "COUNTRY OF ORIGIN",
+            "description": """The country where the goods being paid for were originally manufactured, produced, or grown. This might be stated in relation to the goods description. This is synonymous with 'COUNTRY OF ORIGIN OF GOODS'.
             Look for 'Country of Origin:', 'Origin of Goods:', 'Made in:'.
             Example: "China", "Germany", "Vietnam".
         """},
-        {"name": "IMPORT LICENSE DETAILS",
-         "description": """Details of any specific import license or permit required for the goods, including the license number and possibly its validity or the issuing authority.
+        {
+             "name": "IMPORT LICENSE DETAILS",
+            "description": """Details of any specific import license or permit required for the goods, including the license number and possibly its validity or the issuing authority.
             Look for 'Import Licence No.:', 'Permit Number:', 'Authorization Details:'. This may be more than just a number, potentially including date or type of license.
             Example: "Licence No: IL/COMM/2024/00123, Valid until: 31-12-2024" or "DGFT License XYZ123".
         """},
-        {"name": "CURRENCY AND AMOUNT OF REMITTANCE IN WORDS",
-         "description": """The total remittance amount written out in words, including the currency. (e.g., 'US Dollars One Hundred Thousand Only', 'EURO Twenty-One Thousand Seven Hundred Twelve and Cents Eighteen Only').
+        {
+            "name": "CURRENCY AND AMOUNT OF REMITTANCE IN WORDS",
+            "description": """The total remittance amount written out in words, including the currency. (e.g., 'US Dollars One Hundred Thousand Only', 'EURO Twenty-One Thousand Seven Hundred Twelve and Cents Eighteen Only').
             Look for labels like 'Amount in Words:', 'Sum of (Currency) in Words:'. Typically found near the numerical amount.
             Example: "US DOLLARS FIFTY THOUSAND ONLY" or "EURO TEN THOUSAND FIVE HUNDRED AND FIFTY POINT TWENTY FIVE".
         """},
-        {"name": "INVOICE NO",
-         "description": """The unique identification number of the Proforma or Commercial Invoice related to this remittance request, as issued by the beneficiary/exporter. This field is being extracted from the CRL where it references an invoice.
+        {
+            "name": "INVOICE NO",
+            "description": """The unique identification number of the Proforma or Commercial Invoice related to this remittance request, as issued by the beneficiary/exporter. This field is being extracted from the CRL where it references an invoice.
             Look for labels in the CRL like 'Invoice No.:', 'Ref. Invoice:', 'Against Invoice No.:'.
             Example: "PI-2024-001" or "EXPORTINV/789".
         """},
-        {"name": "INVOICE DATE",
-         "description": """The date on which the referenced Proforma or Commercial Invoice (see 'INVOICE NO' field) was issued by the beneficiary/exporter. This field is being extracted from the CRL where it references an invoice.
+        {
+            "name": "INVOICE DATE",
+            "description": """The date on which the referenced Proforma or Commercial Invoice (see 'INVOICE NO' field) was issued by the beneficiary/exporter. This field is being extracted from the CRL where it references an invoice.
             Look for labels in the CRL like 'Invoice Date:', 'Date of Invoice:'.
             Example: "10-07-2024" or "July 10, 2024".
         """},
-        {"name": "INVOICE VALUE",
-         "description": """The total monetary value stated on the referenced Proforma or Commercial Invoice. This should align with the 'REMITTANCE AMOUNT' if the full invoice value is being paid via this CRL. This field is being extracted from the CRL where it references an invoice.
+        {
+            "name": "INVOICE VALUE",
+            "description": """The total monetary value stated on the referenced Proforma or Commercial Invoice. This should align with the 'REMITTANCE AMOUNT' if the full invoice value is being paid via this CRL. This field is being extracted from the CRL where it references an invoice.
             Look for labels in the CRL like 'Invoice Amount:', 'Invoice Total Value:', 'Value of Invoice:'.
             Example: "21712.18" or "150000.00".
         """},
-        {"name": "EXCHANGE RATE",
-         "description": """The exchange rate applied or requested for converting the remittance amount from one currency to another, if applicable (e.g., from local currency of debit account to the foreign currency of remittance).
+        {
+            "name": "EXCHANGE RATE",
+            "description": """The exchange rate applied or requested for converting the remittance amount from one currency to another, if applicable (e.g., from local currency of debit account to the foreign currency of remittance).
             Look for 'Exchange Rate:', 'Rate Applied:', 'FX Rate:'. May be specified by customer or bank.
             Example: "1 USD = 83.50 INR" or "0.92 EUR/USD".
         """},
-        {"name": "TREASURY REFERENCE NO",
-         "description": """A unique reference number for a foreign exchange (forex) deal booked with the bank's treasury to fix the exchange rate, if applicable. Similar to 'DEAL ID'.
+        {
+            "name": "TREASURY REFERENCE NO",
+            "description": """A unique reference number for a foreign exchange (forex) deal booked with the bank's treasury to fix the exchange rate, if applicable. Similar to 'DEAL ID'.
             Look for 'Treasury Ref No:', 'Forex Deal ID:', 'FX Contract No.:'.
             Example: "TRSY/FX/2024/00567".
         """},
-        {"name": "SPECIFIC REFERENCE FOR SWIFT FIELD 70/72",
-         "description": """Narrative or specific instructions the applicant wants to be included in the SWIFT payment message's Field 70 (Remittance Information) or Field 72 (Sender to Receiver Information). This often includes invoice numbers, purpose of payment, or other details for the beneficiary or beneficiary's bank.
+        {
+            "name": "SPECIFIC REFERENCE FOR SWIFT FIELD 70/72",
+            "description": """Narrative or specific instructions the applicant wants to be included in the SWIFT payment message's Field 70 (Remittance Information) or Field 72 (Sender to Receiver Information). This often includes invoice numbers, purpose of payment, or other details for the beneficiary or beneficiary's bank.
             Look for labels 'Payment Reference (for SWIFT F70):', 'Message to Beneficiary Bank (F72):', 'Narrative for Beneficiary:'. Extract the text provided.
             Example: "/INV/PI-2024-001/ORDER/PO-ABC-123" or "PAYMENT FOR CONSULTANCY SERVICES AGREEMENT DATED 01-06-2024".
         """},
-        {"name": "DESCRIPTION OF GOODS", 
-         "description": """A detailed account or specific description of the goods or services for which the payment is being made, as stated in the customer's request letter. This might be more detailed than 'TYPE OF GOODS' and directly quoted from the customer's application.
+        {
+            "name": "DESCRIPTION OF GOODS", 
+            "description": """A detailed account or specific description of the goods or services for which the payment is being made, as stated in the customer's request letter. This might be more detailed than 'TYPE OF GOODS' and directly quoted from the customer's application.
             Look for sections like 'Description of Goods/Services:', 'Details of Import:', or a narrative part describing the items.
             Example: "Supply and installation of Model X-500 Industrial Compressor and associated spare parts" or "Annual Subscription Fee for Cloud Software Platform".
         """},
-        {"name": "TRANSACTION Product Code Selection",
-         "description": """A specific internal code or explicit selection by the applicant identifying the bank's financial product used for this transaction (e.g., 'Import Advance', 'Direct Import Bill').
+        {
+            "name": "TRANSACTION Product Code Selection",
+            "description": """A specific internal code or explicit selection by the applicant identifying the bank's financial product used for this transaction (e.g., 'Import Advance', 'Direct Import Bill').
             Search for 'Product Code:', 'Transaction Product:', or a highlighted product name.
             Example: "IMP-ADV-001" or "TF-PAY-SIGHT".
             """},
-        {"name": "TRANSACTION EVENT",
-         "description": """Identifies the specific event in the transaction lifecycle (e.g., 'Payment Initiation', 'Remittance Issuance'). For CRL, this is typically the initiation of a payment instruction.
+        {
+            "name": "TRANSACTION EVENT",
+            "description": """Identifies the specific event in the transaction lifecycle (e.g., 'Payment Initiation', 'Remittance Issuance'). For CRL, this is typically the initiation of a payment instruction.
             Often implicit. Look for explicit statements if any.
             Example: "Outward Remittance Processing".
             """},
-        {"name": "VALUE DATE",
-         "description": """The requested date for funds to be debited from applicant's account and/or credited to the beneficiary (effective settlement date).
+        {
+            "name": "VALUE DATE",
+            "description": """The requested date for funds to be debited from applicant's account and/or credited to the beneficiary (effective settlement date).
             Look for 'Value Date:', 'Settlement Date:', 'Debit Date:'.
             Example: "17-07-2024" or "Spot".
             """},
-        {"name": "INCO TERM",
-         "description": """The standardized three-letter trade term (e.g., FOB, CIF, EXW) defining buyer/seller responsibilities for delivery, costs, and risks, as mentioned in the CRL (often referencing sales contract/invoice).
+        {
+            "name": "INCO TERM",
+            "description": """The standardized three-letter trade term (e.g., FOB, CIF, EXW) defining buyer/seller responsibilities for delivery, costs, and risks, as mentioned in the CRL (often referencing sales contract/invoice).
             Look for 'Incoterm:', 'Trade Term:', or terms like 'CIF (Port Name)'.
             Example: "CIF (Destination Port)" or "EXW (Seller's Factory)".
             """},
-        {"name": "THIRD PARTY EXPORTER NAME",
-         "description": """Name of a third-party exporter if goods are exported by an entity different from the main beneficiary receiving payment.
+        {
+            "name": "THIRD PARTY EXPORTER NAME",
+            "description": """Name of a third-party exporter if goods are exported by an entity different from the main beneficiary receiving payment.
             Look for 'Third Party Exporter:', 'Actual Exporter (if different):'. If not applicable, null.
             Example: "Global Sourcing Agents Ltd.".
         """},
-        {"name": "THIRD PARTY EXPORTER COUNTRY",
-         "description": """Country of the third-party exporter, if applicable.
+        {
+            "name": "THIRD PARTY EXPORTER COUNTRY",
+            "description": """Country of the third-party exporter, if applicable.
             Example: "Hong Kong".
         """}
     ],
