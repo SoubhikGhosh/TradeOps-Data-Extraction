@@ -3,21 +3,25 @@ import os
 from dotenv import load_dotenv
 from vertexai.generative_models import HarmCategory, HarmBlockThreshold
 
-load_dotenv() # Optional: Load environment variables from a .env file
+load_dotenv()  # Optional: Load environment variables from a .env file
 
 # --- Vertex AI Configuration ---
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "hbl-uat-ocr-fw-app-prj-spk-4d")
 LOCATION = "asia-south1"
 # Use a powerful multimodal model capable of handling PDFs and complex instructions
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-pro-002") # Or gemini-1.5-flash / newer appropriate model
-API_ENDPOINT = f"{LOCATION}-aiplatform.googleapis.com" # Often not needed if default is correct
+MODEL_NAME = os.getenv(
+    "GEMINI_MODEL", "gemini-1.5-pro-002"
+)  # Or gemini-1.5-flash / newer appropriate model
+API_ENDPOINT = (
+    f"{LOCATION}-aiplatform.googleapis.com"  # Often not needed if default is correct
+)
 
 # --- Supported File Types ---
 SUPPORTED_MIME_TYPES = {
     "application/pdf": "PDF",
-    "image/png": "PNG", 
+    "image/png": "PNG",
     "image/jpeg": "JPEG",
-    "image/jpg": "JPEG"
+    "image/jpg": "JPEG",
 }
 
 SUPPORTED_FILE_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg"]
@@ -34,8 +38,8 @@ SAFETY_SETTINGS = {
 DOCUMENT_FIELDS = {
     "CRL": [
         {
-        "name": "DATE & TIME OF RECEIPT OF DOCUMENT",
-        "description": """
+            "name": "DATE & TIME OF RECEIPT OF DOCUMENT",
+            "description": """
     **You are an expert document analysis system. Your task is to extract the Date and Time of Document Receipt from a circular seal present in the document image.**
 
     **Objective:** Accurately locate a specific circular mechanical stamp (seal) in the document and precisely extract the date and time indicated by its features. The time extraction requires meticulous application of rules based on the **leading edge** of an arrow pointer and a 24-slot/4-segment time mechanism, particularly a specific rule for interpreting alignment with major hour lines. Ignore any extraneous text on the seal that is not part of the date or the time scale markings.
@@ -93,11 +97,11 @@ DOCUMENT_FIELDS = {
         * **Format:** Provide the extracted **Date** and the determined **Time** combined into a single string in the format: **DD-MM-YYYY HH:MM** (24-hour clock). Ensure the date part reflects the day, month, and full four-digit year.
         * **If Not Found:** If the described seal is not found in the document, or if the date or time cannot be reliably determined according to the rules, return **null**.
         * **Ambiguity Note:** If a critical judgment call was necessary due to unavoidable visual ambiguity (as described in Section IV), append a brief note explaining the ambiguity and the choice made. Example: "Ambiguity: Pointer leading edge very close to major line '03'; interpreted as just past line, resulting in 03:00 rather than 02:00."
-    """
+    """,
         },
         {
-        "name": "CUSTOMER REQUEST LETTER DATE",
-        "description": """
+            "name": "CUSTOMER REQUEST LETTER DATE",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Customer Request Letter Date from the document.**
 
     **Objective:** Accurately locate and extract the specific date on which the customer (also referred to as the applicant) formally prepared and dated their request letter or application form. This is considered the authorship date of the letter by the customer.
@@ -124,11 +128,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Standardize and return the extracted date in **DD-MM-YYYY** format. For example, if "October 3, 2023" is found, output "03-10-2023". If "2023/10/03" is found, output "03-10-2023". If "22/12/23" is found, output "22-12-2023".
     * **If Not Found:** If the Customer Request Letter Date cannot be clearly identified or is absent from the document, return **null**.
     * **Clarification:** Distinguish this from other dates like 'Date of Receipt' or 'Invoice Date' unless the document structure clearly indicates this is the primary letter date.
-    """
+    """,
         },
         {
-        "name": "BENEFICIARY NAME",
-        "description": """
+            "name": "BENEFICIARY NAME",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Beneficiary Name from the document.**
 
     **Objective:** Accurately locate and extract the full, official legal name of the beneficiary. The beneficiary is the party (e.g., exporter, seller, service provider) designated to receive funds or benefit from the transaction described in the document.
@@ -155,11 +159,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted name as a **single string**.
     * **If Not Found:** If the Beneficiary Name cannot be clearly identified or is absent from the document, return **null**.
     * **Completeness:** Prioritize extracting the most complete version of the name if multiple similar mentions are found; usually, the one associated with a clear label is most reliable.
-    """
+    """,
         },
         {
-        "name": "BENEFICIARY ADDRESS",
-        "description": """
+            "name": "BENEFICIARY ADDRESS",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Beneficiary Address from the document.**
 
     **Objective:** Accurately locate and extract the complete mailing address of the beneficiary.
@@ -182,11 +186,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted address as a **single string**.
     * **If Not Found:** If the Beneficiary Address cannot be clearly identified or is absent, return **null**.
     * **Completeness:** Ensure all components of the address (street, city, postal code, etc.) visible are extracted.
-    """
+    """,
         },
         {
-        "name": "BENEFICIARY COUNTRY",
-        "description": """
+            "name": "BENEFICIARY COUNTRY",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Beneficiary Country from the document.**
 
     **Objective:** Accurately locate and extract the country where the beneficiary is officially located or registered.
@@ -210,11 +214,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted country name as a **string**.
     * **If Not Found:** If the Beneficiary Country cannot be clearly identified or is absent, return **null**.
     * **Standardization (Optional but helpful):** If possible, standardize to common country names (e.g., "USA" to "United States"). If unsure, extract as written.
-    """
+    """,
         },
         {
-        "name": "REMITTANCE CURRENCY",
-        "description": """
+            "name": "REMITTANCE CURRENCY",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Remittance Currency code from the document.**
 
     **Objective:** Accurately locate and extract the three-letter ISO 4217 currency code (e.g., USD, EUR, INR) for the funds requested for remittance.
@@ -238,11 +242,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted three-letter ISO 4217 currency code as a **string** (e.g., "USD").
     * **If Not Found:** If the currency code cannot be clearly identified, return **null**.
     * **Consistency:** Ensure the extracted code is indeed a standard currency code.
-    """
+    """,
         },
         {
-        "name": "REMITTANCE AMOUNT",
-        "description": """
+            "name": "REMITTANCE AMOUNT",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Remittance Amount from the document.**
 
     **Objective:** Accurately locate and extract the principal monetary value of the transaction requested for remittance, in the specified 'REMITTANCE CURRENCY'.
@@ -269,11 +273,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted amount as a **numerical value (float or decimal type if possible, otherwise string representing the number, e.g., "21712.18")**. Remove any currency symbols, currency codes, or thousands separators (like commas) before converting to a number, but retain the decimal separator.
     * **If Not Found:** If the Remittance Amount cannot be clearly identified, return **null**.
-    """
+    """,
         },
         {
-        "name": "BENEFICIARY ACCOUNT NO / IBAN",
-        "description": """
+            "name": "BENEFICIARY ACCOUNT NO / IBAN",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Beneficiary's Bank Account Number or IBAN from the document.**
 
     **Objective:** Accurately locate and extract the beneficiary's bank account number or International Bank Account Number (IBAN) where the funds are to be credited.
@@ -300,11 +304,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted account number or IBAN as a **string**.
     * **If Not Found:** If the Beneficiary Account No / IBAN cannot be clearly identified, return **null**.
     * **Normalization Note:** While extracting as presented, downstream processes might normalize by removing spaces and hyphens.
-    """
+    """,
         },
         {
-        "name": "BENEFICIARY BANK",
-        "description": """
+            "name": "BENEFICIARY BANK",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Beneficiary Bank Name from the document.**
 
     **Objective:** Accurately locate and extract the full official name of the bank where the beneficiary holds their account.
@@ -330,11 +334,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted bank name as a **string**.
     * **If Not Found:** If the Beneficiary Bank name cannot be clearly identified, return **null**.
-    """
+    """,
         },
         {
-        "name": "BENEFICIARY BANK ADDRESS",
-        "description": """
+            "name": "BENEFICIARY BANK ADDRESS",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Beneficiary Bank Address from the document.**
 
     **Objective:** Accurately locate and extract the complete mailing address of the beneficiary's bank.
@@ -357,11 +361,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted bank address as a **single string**.
     * **If Not Found:** If the Beneficiary Bank Address cannot be clearly identified or is absent, return **null**.
     * **Completeness:** Ensure all components of the address (street, city, country, etc.) visible are extracted.
-    """
+    """,
         },
         {
-        "name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE",
-        "description": """
+            "name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Beneficiary Bank's identification code from the document.**
 
     **Objective:** Accurately locate and extract the unique identification code of the beneficiary's bank or bank branch. This code can be a SWIFT/BIC code, Sort Code, BSB number, IFSC code, or a similar bank identifier (e.g., ABA for US routing).
@@ -392,11 +396,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted code as a **single string**.
     * **If Not Found:** If no such bank identification code for the beneficiary bank can be found, return **null**.
     * **Preference:** If both a SWIFT/BIC and another local code (IFSC, Sort Code, BSB, ABA) are clearly listed for the beneficiary bank, and no other instruction specifies which to take, prefer the SWIFT/BIC. If only one type is present, extract that.
-    """
+    """,
         },
         {
-        "name": "STANDARD DECLARATIONS AS PER PRODUCTS",
-        "description": """
+            "name": "STANDARD DECLARATIONS AS PER PRODUCTS",
+            "description": """
     **You are an expert data extraction system. Your task is to extract Standard Declarations made by the applicant from the document.**
 
     **Objective:** Accurately locate and extract the full text of any standard clauses, undertakings, legal statements, or compliance declarations made by the applicant (customer) within the request letter. These declarations often pertain to regulatory compliance (e.g., FEMA, AML, OFAC), the nature/purpose of the transaction, or affirmations of applicant responsibility.
@@ -427,11 +431,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted declarations as a **single multi-line string**, preserving the general structure (like paragraph breaks and list formatting if simple) as much as possible.
     * **If Not Found:** If no such standard declarations by the applicant are found, return **null**.
     * **Completeness:** Aim to capture all text that clearly forms part of the applicant's declarations. If a declaration section is extensive, extract all of it.
-    """
+    """,
         },
         {
-        "name": "APPLICANT SIGNATURE",
-        "description": """
+            "name": "APPLICANT SIGNATURE",
+            "description": """
     **You are an expert data extraction system. Your task is to identify evidence of the Applicant's Signature or Authorization on the document.**
 
     **Objective:** Determine if the document contains evidence of the applicant's (or their authorized signatory's) signature or formal authorization. This is not about extracting an image of the signature but rather textual confirmation or details related to it.
@@ -461,11 +465,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted information as a **string**. This could be the signatory's typed name and title, a confirmation like "Signature Present", or the text from the authorization line.
     * **If Not Found:** If no clear evidence of an applicant signature or authorization is found in typical locations, return **null**.
     * **Focus:** Prioritize extracting typed names and titles over generic "Signature Present" if both are available.
-    """
+    """,
         },
         {
-        "name": "APPLICANT NAME",
-        "description": """
+            "name": "APPLICANT NAME",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Applicant Name from the document.**
 
     **Objective:** Accurately locate and extract the full legal name of the individual or company submitting the request letter (the applicant or customer).
@@ -493,11 +497,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted name as a **string**.
     * **If Not Found:** If the Applicant Name cannot be clearly identified, return **null**.
     * **Distinction:** Differentiate from the Beneficiary Name. The Applicant is the one making the payment/request.
-    """
+    """,
         },
         {
-        "name": "APPLICANT ADDRESS",
-        "description": """
+            "name": "APPLICANT ADDRESS",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Applicant Address from the document.**
 
     **Objective:** Accurately locate and extract the complete mailing address of the applicant (customer).
@@ -522,11 +526,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted address as a **single string**.
     * **If Not Found:** If the Applicant Address cannot be clearly identified or is absent, return **null**.
     * **Completeness:** Ensure all components of the address visible are extracted.
-    """
+    """,
         },
         {
-        "name": "APPLICANT COUNTRY",
-        "description": """
+            "name": "APPLICANT COUNTRY",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Applicant Country from the document.**
 
     **Objective:** Accurately locate and extract the country where the applicant (customer) is officially located or registered.
@@ -551,11 +555,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted country name as a **string**.
     * **If Not Found:** If the Applicant Country cannot be clearly identified or is absent, return **null**.
     * **Standardization (Optional):** If possible, standardize to common country names. If unsure, extract as written.
-    """
+    """,
         },
         {
-        "name": "HS CODE",
-        "description": """
+            "name": "HS CODE",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the HS Code(s) from the document.**
 
     **Objective:** Accurately locate and extract the Harmonized System (HS) or Harmonized System Nomenclature (HSN) code(s) mentioned in the document. These are international standardized codes for classifying traded goods.
@@ -578,11 +582,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted HS code(s) as a **string**. If multiple codes are found, they can be concatenated with a comma and space (e.g., "69072300, 85176200"). Digits only is preferred, so "8517.62.00" should become "85176200".
     * **If Not Found:** If no HS Code is found, return **null**.
-    """
+    """,
         },
         {
-        "name": "TYPE OF GOODS",
-        "description": """
+            "name": "TYPE OF GOODS",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Type of Goods description from the document.**
 
     **Objective:** Accurately locate and extract a general description of the merchandise, products, or services being imported or paid for.
@@ -606,11 +610,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted description as a **string**.
     * **If Not Found:** If the Type of Goods cannot be clearly identified, return **null**.
     * **Distinction:** If both a general 'Type of Goods' and a more detailed 'DESCRIPTION OF GOODS' (another field) are present, ensure this field captures the more general categorization if one exists, otherwise it might overlap with 'DESCRIPTION OF GOODS'.
-    """
+    """,
         },
         {
-        "name": "DEBIT ACCOUNT NO",
-        "description": """
+            "name": "DEBIT ACCOUNT NO",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Applicant's Debit Account Number from the document.**
 
     **Objective:** Accurately locate and extract the applicant's bank account number from which the principal transaction funds will be debited.
@@ -635,11 +639,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted account number as a **string**.
     * **If Not Found:** If the Debit Account Number for the principal amount cannot be clearly identified, return **null**.
     * **Clarification:** If the same account is used for both principal and fees, this field should still be populated. If a separate fee account is mentioned, that goes into 'FEE ACCOUNT NO'.
-    """
+    """,
         },
         {
-        "name": "FEE ACCOUNT NO",
-        "description": """
+            "name": "FEE ACCOUNT NO",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Applicant's Fee Account Number from the document, if specified as different from the main debit account.**
 
     **Objective:** Accurately locate and extract the applicant's bank account number from which transaction fees or charges will be debited, IF this account is explicitly stated as being separate from the 'DEBIT ACCOUNT NO' used for the principal remittance amount.
@@ -661,11 +665,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted fee account number as a **string**.
     * **If Not Found or Same as Debit:** If no *separate* fee account is specified, or if it's explicitly stated that fees are from the main debit account, return **null**. This field is specifically for a *different* fee account. If charges are from "on us a/c no X", then X is the fee account.
-    """
+    """,
         },
         {
-        "name": "LATEST SHIPMENT DATE",
-        "description": """
+            "name": "LATEST SHIPMENT DATE",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Latest Shipment Date from the document.**
 
     **Objective:** Accurately locate and extract the latest date by which the goods must be shipped by the exporter/seller, as specified in the document (often related to terms in a Letter of Credit, purchase order, or proforma invoice referenced in the request).
@@ -685,11 +689,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Standardize and return the extracted date in **DD-MM-YYYY** format.
     * **If Not Found:** If the Latest Shipment Date cannot be clearly identified or is absent, return **null**.
-    """
+    """,
         },
         {
-        "name": "DISPATCH PORT",
-        "description": """
+            "name": "DISPATCH PORT",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Dispatch Port (Port of Loading) from the document.**
 
     **Objective:** Accurately locate and extract the name of the port, airport, or place from where the goods are to be dispatched or shipped (also known as Port of Loading).
@@ -710,11 +714,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted port name as a **string**.
     * **If Not Found:** If the Dispatch Port cannot be clearly identified or is absent, return **null**.
-    """
+    """,
         },
         {
-        "name": "DELIVERY PORT",
-        "description": """
+            "name": "DELIVERY PORT",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Delivery Port (Port of Discharge) from the document.**
 
     **Objective:** Accurately locate and extract the name of the port, airport, or place where the goods are to be delivered in the destination country (also known as Port of Discharge or Destination Port).
@@ -735,11 +739,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted port name as a **string**.
     * **If Not Found:** If the Delivery Port cannot be clearly identified or is absent, return **null**.
-    """
+    """,
         },
         {
-        "name": "FB CHARGES",
-        "description": """
+            "name": "FB CHARGES",
+            "description": """
     **You are an expert data extraction system. Your task is to extract who bears the Foreign Bank Charges from the document.**
 
     **Objective:** Accurately locate and extract the instruction indicating who is responsible for paying foreign bank charges. This is typically represented by a three-letter code: BEN (Beneficiary), OUR (Applicant), or SHA (Shared).
@@ -765,11 +769,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted code/term as a **string** (e.g., "BEN", "OUR", "SHA").
     * **If Not Found:** If the instruction for foreign bank charges cannot be clearly identified, return **null**.
-    """
+    """,
         },
         {
-        "name": "INTERMEDIARY BANK NAME",
-        "description": """
+            "name": "INTERMEDIARY BANK NAME",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Intermediary Bank Name from the document, if specified.**
 
     **Objective:** Accurately locate and extract the full official name of any intermediary or correspondent bank involved in the payment chain, if such information is provided.
@@ -790,11 +794,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted bank name as a **string**.
     * **If Not Found / Not Applicable:** If no intermediary bank is specified, or if the section is explicitly marked as N/A, return **null**.
-    """
+    """,
         },
         {
-        "name": "INTERMEDIARY BANK ADDRESS",
-        "description": """
+            "name": "INTERMEDIARY BANK ADDRESS",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Intermediary Bank Address from the document, if specified.**
 
     **Objective:** Accurately locate and extract the complete mailing address of the intermediary or correspondent bank, if such information is provided.
@@ -814,11 +818,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted address as a **single string**.
     * **If Not Found / Not Applicable:** If no intermediary bank address is specified, or if the intermediary bank itself is not mentioned, return **null**.
-    """
+    """,
         },
         {
-        "name": "INTERMEDIARY BANK COUNTRY",
-        "description": """
+            "name": "INTERMEDIARY BANK COUNTRY",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Intermediary Bank Country from the document, if specified.**
 
     **Objective:** Accurately locate and extract the country where the intermediary or correspondent bank is located, if such information is provided.
@@ -837,11 +841,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted country name as a **string**.
     * **If Not Found / Not Applicable:** If no intermediary bank country is specified, or if the intermediary bank itself is not mentioned, return **null**.
-    """
+    """,
         },
         {
-        "name": "CUSTOMER SIGNATURE",
-        "description": """
+            "name": "CUSTOMER SIGNATURE",
+            "description": """
     **You are an expert data extraction system. Your task is to identify evidence of the Customer's (Applicant's) Signature or Authorization on the document. This field is synonymous with 'APPLICANT SIGNATURE'.**
 
     **Objective:** Determine if the document contains evidence of the customer's (applicant's or their authorized signatory's) signature or formal authorization. This is not about extracting an image of the signature but rather textual confirmation or details related to it.
@@ -870,11 +874,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted information as a **string**. This could be the signatory's typed name and title, a confirmation like "Signature Present", or the text from the authorization line.
     * **If Not Found:** If no clear evidence of a customer signature or authorization is found, return **null**.
     * **Synonymy:** Treat this field as identical in purpose and extraction logic to 'APPLICANT SIGNATURE'.
-    """
+    """,
         },
         {
-        "name": "MODE OF REMITTANCE",
-        "description": """
+            "name": "MODE OF REMITTANCE",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Mode of Remittance from the document.**
 
     **Objective:** Accurately locate and extract the method requested by the customer for making the payment to the beneficiary.
@@ -896,11 +900,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted mode of remittance as a **string**.
     * **If Not Found:** If the Mode of Remittance cannot be clearly identified, return **null**.
-    """
+    """,
         },
         {
-        "name": "COUNTRY OF ORIGIN",
-        "description": """
+            "name": "COUNTRY OF ORIGIN",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Country of Origin of Goods from the document. This field is synonymous with 'COUNTRY OF ORIGIN OF GOODS'.**
 
     **Objective:** Accurately locate and extract the country where the goods being paid for were originally manufactured, produced, or grown.
@@ -922,11 +926,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted country name as a **string**.
     * **If Not Found:** If the Country of Origin for the goods cannot be clearly identified, return **null**.
     * **Synonymy:** Treat this as equivalent to "COUNTRY OF ORIGIN OF GOODS".
-    """
+    """,
         },
         {
-        "name": "IMPORT LICENSE DETAILS",
-        "description": """
+            "name": "IMPORT LICENSE DETAILS",
+            "description": """
     **You are an expert data extraction system. Your task is to extract Import License Details from the document.**
 
     **Objective:** Accurately locate and extract details of any specific import license or permit required for the goods, as mentioned in the document. This can include the license number, validity, issuing authority, or type.
@@ -948,11 +952,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted details as a **single string**.
     * **If Not Found / Not Applicable:** If no import license details are mentioned, or if the section is explicitly marked N/A, return **null**.
-    """
+    """,
         },
         {
-        "name": "CURRENCY AND AMOUNT OF REMITTANCE IN WORDS",
-        "description": """
+            "name": "CURRENCY AND AMOUNT OF REMITTANCE IN WORDS",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Remittance Amount written in words, including the currency, from the document.**
 
     **Objective:** Accurately locate and extract the total remittance amount (principal sum) as it is written out in words, along with the name of the currency also written in words.
@@ -977,11 +981,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted phrase as a **single string**.
     * **If Not Found:** If the amount in words cannot be clearly identified, return **null**.
     * **Completeness:** Capture the entire textual representation.
-    """
+    """,
         },
         {
-        "name": "INVOICE NO",
-        "description": """
+            "name": "INVOICE NO",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Invoice Number referenced in the Customer Request Letter (CRL).**
 
     **Objective:** Accurately locate and extract the unique identification number of the Proforma Invoice or Commercial Invoice that this remittance request pertains to. This information is extracted *from the CRL itself* where it makes reference to an invoice.
@@ -1002,11 +1006,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted invoice number as a **string**.
     * **If Not Found:** If no invoice number is referenced in the CRL, return **null**.
-    """
+    """,
         },
         {
-        "name": "INVOICE DATE",
-        "description": """
+            "name": "INVOICE DATE",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Invoice Date referenced in the Customer Request Letter (CRL).**
 
     **Objective:** Accurately locate and extract the date on which the referenced Proforma or Commercial Invoice (identified by 'INVOICE NO') was issued. This information is extracted *from the CRL itself* where it makes reference to an invoice's date.
@@ -1027,11 +1031,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Standardize and return the extracted date in **DD-MM-YYYY** format.
     * **If Not Found:** If no invoice date is referenced in the CRL, return **null**.
-    """
+    """,
         },
         {
-        "name": "INVOICE VALUE",
-        "description": """
+            "name": "INVOICE VALUE",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Invoice Value referenced in the Customer Request Letter (CRL).**
 
     **Objective:** Accurately locate and extract the total monetary value stated on the referenced Proforma or Commercial Invoice, as mentioned in the CRL. This value should ideally align with the 'REMITTANCE AMOUNT' if the full invoice value is being paid through this CRL.
@@ -1054,11 +1058,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted amount as a **numerical value (float or decimal type if possible, otherwise string representing the number, e.g., "21712.18")**. Remove currency symbols/codes and thousands separators.
     * **If Not Found:** If no invoice value is referenced in the CRL, return **null**.
-    """
+    """,
         },
         {
-        "name": "EXCHANGE RATE",
-        "description": """
+            "name": "EXCHANGE RATE",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Exchange Rate from the document, if specified.**
 
     **Objective:** Accurately locate and extract the exchange rate that has been applied or is requested for converting the remittance amount from one currency to another (e.g., from the applicant's local currency in their debit account to the foreign currency of the remittance).
@@ -1080,11 +1084,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted exchange rate information as a **string**.
     * **If Not Found:** If no exchange rate is specified, return **null**.
-    """
+    """,
         },
         {
-        "name": "TREASURY REFERENCE NO",
-        "description": """
+            "name": "TREASURY REFERENCE NO",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Treasury Reference Number (or Deal ID) from the document, if specified.**
 
     **Objective:** Accurately locate and extract a unique reference number for a foreign exchange (forex) deal that might have been booked with the bank's treasury department to fix the exchange rate for this transaction. This is sometimes referred to as a Deal ID or FX Contract No.
@@ -1105,11 +1109,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted reference number as a **string**.
     * **If Not Found / Not Applicable:** If no treasury reference number is specified, return **null**.
-    """
+    """,
         },
         {
-        "name": "SPECIFIC REFERENCE FOR SWIFT FIELD 70/72",
-        "description": """
+            "name": "SPECIFIC REFERENCE FOR SWIFT FIELD 70/72",
+            "description": """
     **You are an expert data extraction system. Your task is to extract specific reference information intended for SWIFT message fields 70 or 72 from the document.**
 
     **Objective:** Accurately locate and extract any narrative, specific instructions, or reference information that the applicant explicitly requests to be included in the SWIFT payment message's Field 70 (Remittance Information / Purpose of Payment) or Field 72 (Sender to Receiver Information / Bank to Bank Information).
@@ -1132,11 +1136,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted text as a **single string**. If multiple distinct instructions are found (e.g. for F70 and F72 separately), concatenate them with a clear separator like "F70: [text] | F72: [text]" or return as found.
     * **If Not Found:** If no such specific reference for SWIFT fields is provided, return **null**.
-    """
+    """,
         },
         {
-        "name": "DESCRIPTION OF GOODS",
-        "description": """
+            "name": "DESCRIPTION OF GOODS",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the detailed Description of Goods or Services from the document.**
 
     **Objective:** Accurately locate and extract a detailed account or specific description of the goods or services for which the payment is being made, as stated in the customer's request letter. This description might be more detailed than the 'TYPE OF GOODS' field and should be a direct quote or close representation of what's in the application.
@@ -1161,11 +1165,11 @@ DOCUMENT_FIELDS = {
     * **Format:** Return the extracted description as a **string**.
     * **If Not Found:** If a detailed description of goods/services cannot be clearly identified, return **null**.
     * **Distinction from 'TYPE OF GOODS':** This field seeks a more specific and potentially longer description than the general 'TYPE OF GOODS'. If only one description is present, it might populate both fields or this one preferentially.
-    """
+    """,
         },
         {
-        "name": "TRANSACTION Product Code Selection",
-        "description": """
+            "name": "TRANSACTION Product Code Selection",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Transaction Product Code Selection from the document.**
 
     **Objective:** Accurately locate and extract any specific internal bank product code or an explicit selection made by the applicant that identifies the type of financial product being used for this transaction (e.g., 'Import Advance Payment', 'Direct Import Bill Lodgement').
@@ -1186,11 +1190,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted product code or selected product name as a **string**.
     * **If Not Found:** If no specific transaction product code or selection is identified, return **null**.
-    """
+    """,
         },
         {
-        "name": "TRANSACTION EVENT",
-        "description": """
+            "name": "TRANSACTION EVENT",
+            "description": """
     **You are an expert data extraction system. Your task is to identify the Transaction Event being initiated by this document.**
 
     **Objective:** Identify and describe the specific event in the transaction lifecycle that this Customer Request Letter (CRL) represents. For a CRL, this is typically the initiation of a payment instruction or a request for a trade finance instrument.
@@ -1213,11 +1217,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the description of the transaction event as a **string**.
     * **If Not Found (or to be standardized):** If not explicitly stated, a default like "Payment Instruction" or "Remittance Request" might be appropriate based on the document being a CRL. For now, extract if explicitly mentioned or clearly inferable. If truly ambiguous from text, return **null**.
-    """
+    """,
         },
         {
-        "name": "VALUE DATE",
-        "description": """
+            "name": "VALUE DATE",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Value Date from the document.**
 
     **Objective:** Accurately locate and extract the requested date for the funds to be debited from the applicant's account and/or credited to the beneficiary. This is the effective date for the transaction to take place.
@@ -1240,11 +1244,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** If a specific date is found, standardize and return it in **DD-MM-YYYY** format. If a term like "Spot" is found, return the **string "Spot"**.
     * **If Not Found:** If the Value Date cannot be clearly identified, return **null**.
-    """
+    """,
         },
         {
-        "name": "INCO TERM",
-        "description": """
+            "name": "INCO TERM",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Incoterm from the document.**
 
     **Objective:** Accurately locate and extract the standardized three-letter trade term (e.g., FOB, CIF, EXW) that defines the responsibilities of the buyer and seller for the delivery of goods, costs, and risks. This term is usually mentioned in the CRL as it references a sales contract or invoice.
@@ -1267,11 +1271,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted Incoterm and associated place as a **single string** (e.g., "CIF Shanghai").
     * **If Not Found:** If no Incoterm is specified, return **null**.
-    """
+    """,
         },
         {
-        "name": "THIRD PARTY EXPORTER NAME",
-        "description": """
+            "name": "THIRD PARTY EXPORTER NAME",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Third Party Exporter Name from the document, if applicable.**
 
     **Objective:** Accurately locate and extract the name of a third-party exporter if the goods are being exported by an entity that is different from the main beneficiary who is receiving the payment.
@@ -1291,11 +1295,11 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted name as a **string**.
     * **If Not Found / Not Applicable:** If no third-party exporter is mentioned, or if the exporter is the same as the beneficiary, return **null**.
-    """
+    """,
         },
         {
-        "name": "THIRD PARTY EXPORTER COUNTRY",
-        "description": """
+            "name": "THIRD PARTY EXPORTER COUNTRY",
+            "description": """
     **You are an expert data extraction system. Your task is to extract the Third Party Exporter Country from the document, if applicable.**
 
     **Objective:** Accurately locate and extract the country of the third-party exporter, if such an exporter is named and is different from the main beneficiary.
@@ -1314,13 +1318,12 @@ DOCUMENT_FIELDS = {
     **Output Requirements:**
     * **Format:** Return the extracted country name as a **string**.
     * **If Not Found / Not Applicable:** If no third-party exporter country is specified (or no third-party exporter is named), return **null**.
-    """
-        }
+    """,
+        },
     ],
-
     "INVOICE": [
         {
-            "name": "TYPE OF INVOICE - COMMERCIAL/PROFORMA/CUSTOMS", 
+            "name": "TYPE OF INVOICE - COMMERCIAL/PROFORMA/CUSTOMS",
             "description": """The explicit classification of the invoice document based on its title and purpose.
                             Search for prominent titles like 'COMMERCIAL INVOICE', 'PROFORMA INVOICE', 'TAX INVOICE', 'CUSTOMS INVOICE', 'INVOICE', 'PROFORMA', 'PI', 'PO'.
                             - **COMMERCIAL INVOICE:** A final bill.
@@ -1328,285 +1331,1045 @@ DOCUMENT_FIELDS = {
                             - **CUSTOMS INVOICE:** For customs authorities.
                             Infer based on content if title is ambiguous. (Note: Standard spelling is 'Proforma').
                             Example: "PROFORMA INVOICE" or "COMMERCIAL INVOICE".
-                            """
+                            """,
         },
         {
-            "name": "INVOICE DATE",
-            "description": """The specific date when the invoice was created or issued by the seller/issuer.
-                            Look for labels like 'Invoice Date', 'Date', 'Issue Date', 'Date of Issue'.
-                            It's usually found near the invoice number or seller's details. Ensure it's a clear date format (e.g., DD-MMM-YY, MM/DD/YYYY, YYYY-MM-DD). Example: '27-Sep-23'[cite: 4]."""
+            "name": "INVOICE_DATE",
+            "description": """Extract the specific date when the invoice or proforma invoice was created or issued by the seller/issuer.
+
+            **Typical Location & Labels:**
+            This date is usually found in the header of the document, often near the Invoice Number (or Proforma No.), or close to the seller's details.
+            Look for labels such as 'Invoice Date', 'Date', 'Issue Date', 'Date of Issue', or similar terms. Prioritize the date most clearly associated with the overall document issuance.
+
+            **Important Considerations for Extraction:**
+            1.  **OCR Imperfections in Dates:** The input text (from OCR) can have errors. Numbers in dates are prone to misrecognition (e.g., '0' vs 'O', '1' vs '7', '3' vs '8', '5' vs '6'). Interpret carefully to capture the most plausible date.
+            2.  **Date Formats:** Dates can appear in various formats (e.g., DD/MM/YYYY, MM/DD/YYYY, DD-MMM-YY, YYYY-MM-DD, DD.MM.YYYY). Extract the date as it appears in the document.
+            3.  **Ambiguity with Multiple Dates:** If multiple dates are present (e.g., order date, shipping date, invoice date), ensure you extract the primary issuance date of this specific invoice/proforma invoice. This is typically the date listed alongside or directly under the main invoice/proforma number.
+            4.  **Readability Issues:** If parts of the date text appear garbled or unclear from the OCR output, extract the legible portions accurately.
+
+            **Output Format:**
+            Extract the date as a single string, preserving its original format as seen in the document.
+
+            **Example (from the provided document context):**
+            In the current document (a proforma invoice), the relevant date is found next to the label 'DATE:' in the section containing the 'PROFORMA NO:', and its value is '10/10/2024'.
+
+            **Task:** Locate and accurately extract this issuance date from the provided document text.
+            """,
         },
         {
-            "name": "INVOICE NO",
-            "description": """The unique alphanumeric identifier assigned to this specific invoice by the seller/issuer.
-                            Search for labels such as 'Invoice No.', 'Invoice #', 'Inv. No.', 'Reference #', 'Document No.'.
-                            This is a critical field and is usually prominently displayed, often in the header or near the seller's information. Example: '2546049' listed under 'Reference #' [cite: 2] for a proforma invoice."""
+            "name": "INVOICE_NO",
+            "description": """Extract the unique alphanumeric identifier assigned to this specific invoice or proforma invoice by the seller/issuer.
+
+            **Typical Location & Labels:**
+            This identifier is critical and usually prominently displayed, often in the header of the document, near the date, or near the seller's information.
+            Search for labels such as 'Invoice No.', 'Invoice #', 'Inv. No.', 'PROFORMA NO:', 'Proforma Invoice No.', 'Reference #', 'Document No.', or similar terms.
+
+            **Important Considerations for Extraction:**
+            1.  **OCR Imperfections & Alphanumeric Strings:** The input text (from OCR) can have errors. Invoice numbers are often alphanumeric and may contain characters that OCR can confuse (e.g., '0' vs 'O', '1' vs 'I' or 'l', 'S' vs '5', 'G' vs '6', 'B' vs '8'). Interpret carefully to capture the most plausible identifier.
+            2.  **Special Characters & Formatting:** Invoice numbers can include special characters such as hyphens ('-'), slashes ('/'), spaces, or colons. Ensure these are captured as part of the invoice number if they appear to be integral to it.
+            3.  **Completeness:** Extract the entire sequence of characters that form the invoice number. It might be a combination of letters, numbers, and symbols.
+            4.  **Readability Issues:** If parts of the invoice number text appear garbled or unclear from the OCR output, extract the legible portions accurately. Note if any part seems particularly ambiguous.
+
+            **Output Format:**
+            Extract the identifier as a single string.
+
+            **Example (from the provided document context):**
+            In the current document (a proforma invoice), the identifier is found next to the label 'PROFORMA NO:' and its value is 'IN010 / 2024-25'.
+
+            **Task:** Locate and accurately extract this unique invoice identifier from the provided document text.
+            """,
         },
         {
-            "name": "BUYER NAME",
-            "description": """The full legal name of the individual or company purchasing the goods or services.
-                            Look for labels like 'Buyer', 'Bill To', 'Customer', 'Sold To', 'Consignee' (if also the buyer), 'Importer', 'To:', 'Applicant'.
-                            It's often located in a distinct section detailing the recipient of the invoice. Example: 'Arrow Business Advisory Pvt. Ltd' [cite: 4] under 'BILL TO:'."""
+            "name": "BUYER_NAME",
+            "description": """Extract the full legal name of the individual or company purchasing the goods or services, often referred to as the buyer or consignee.
+
+            **Typical Location & Labels:**
+            Look for this information under or adjacent to labels such as 'CONSIGNEE:', 'Buyer:', 'Bill To:', 'Customer:', 'Sold To:', 'Importer:', 'To:', or 'Applicant:'. It's generally the primary name listed in the recipient details block.
+
+            **Important Considerations for Extraction:**
+            1.  **OCR Imperfections:** The input text is generated by OCR and may contain errors, such as misrecognized characters (e.g., 'I' vs 'L', 'O' vs '0', 'S' vs '5') or inconsistencies in spacing. Please interpret the text carefully to identify the most plausible name.
+            2.  **Ambiguous Characters/Formatting:** Company names can sometimes include special characters or varied casing. Extract the name as accurately as it appears, but be mindful that OCR might misinterpret some stylistic elements. If characters are ambiguous, choose the interpretation that forms a coherent name.
+            3.  **Readability Issues:** If parts of the name text appear garbled, unclear, or potentially unreadable as provided by the OCR, extract the legible portions to the best of your ability. If a significant part is indecipherable, try to capture what is clear.
+            4.  **Completeness:** Ensure you capture the full name. This might be on a single line or could be the first prominent line in the consignee/buyer address block before the street details begin.
+
+            **Output Format:**
+            Extract the name as a single string.
+
+            **Example (from the provided document context):**
+            For instance, in the current invoice, the buyer's name 'SP IMPEX' is the first line under the 'CONSIGNEE' heading.
+
+            **Task:** Identify and extract this name precisely from the provided document text.
+            """,
         },
         {
-            "name": "BUYER ADDRESS",
-            "description": """The complete mailing address of the buyer, including street, city, state/province, postal code, and potentially country.
-                            This information is typically found directly below or adjacent to the 'BUYER NAME' under labels like 'Address', or within the 'Bill To' or 'Consignee' block.
-                            Extract the full, multi-line address as a single string. Example: '159 Mittal Industrial Estate Sanjay Building No. 5/B Marol Naka, Andheri (East) Mumbai - 400 059 India'[cite: 4]."""
+            "name": "BUYER_ADDRESS",
+            "description": """Extract the complete mailing address of the buyer or consignee from the provided text.
+            This information is typically found under headings like 'CONSIGNEE:', 'Bill To:', 'Deliver To:', or 'Buyer:'.
+
+            **Important Considerations for Extraction:**
+            1.  **OCR Imperfections:** The input text is generated by OCR and may contain errors, such as misrecognized characters (e.g., '1' vs 'I', '0' vs 'O', 'S' vs '5', '2' vs 'Z') or inconsistencies in spacing. Please interpret the text carefully, prioritizing common address structures and plausible character sequences.
+            2.  **Ambiguous Characters/Numbers:** Pay special attention to numbers within the address (street numbers, postal codes). If a number seems ambiguous or could be misread, extract the most likely interpretation based on context. For instance, if a character could be '2' or '4', choose the one that forms a more coherent address component.
+            3.  **Readability Issues:** If parts of the address text appear garbled, unclear, or potentially unreadable as provided by the OCR, extract the legible portions to the best of your ability. If a significant part is indecipherable, try to capture what is clear.
+            4.  **Structure:** The address often includes the company name, street details (including number and street name), city, state/province, postal code, and country.
+
+            **Output Format:**
+            Extract the full, multi-line address as a single string, preserving line breaks (e.g., using '\n' as a separator).
+
+            **Example based on common structure (verify against document text):**
+            'COMPANY NAME\nSTREET NUMBER AND NAME,\nDISTRICT/AREA, CITY\nCITY – POSTAL CODE STATE, COUNTRY'
+
+            **Locate the text block clearly designated for the recipient of the goods or invoice and apply the above considerations during extraction.**
+            For instance, in the provided document, this is under 'CONSIGNEE'. The street number initially appeared as 'NO-29', but if it were 'No.-44' and the OCR was slightly off, careful interpretation of the characters would be needed.
+            """,
         },
         {
-            "name": "BUYER COUNTRY",
-            "description": """The country where the buyer is officially located or registered.
-                            This is often the last line of the buyer's address or may be explicitly labeled as 'Country'.
-                            If the address is multi-line, identify the country name. Example: 'India' [cite: 4] as part of the buyer's address."""
+            "name": "BUYER_COUNTRY",
+            "description": """First, identify the full name of the country where the buyer is officially located or registered from their address details.
+            This is often the last line or a prominent part of the buyer's address block (e.g., under 'CONSIGNEE:', 'Bill To:').
+            Second, based on the identified full country name, provide its standard 2-letter ISO 3166-1 alpha-2 country code.
+
+            **Process:**
+            1.  **Identify Full Country Name:**
+                * Scan the buyer's address section for the country name.
+                * **OCR Imperfections:** Be aware that the OCR'd text for the country name might have minor errors (e.g., 'Indla' instead of 'India', 'Untted States' instead of 'United States', 'Canda' for 'Canada'). Interpret to identify the most plausible standard English country name.
+                * **Address Structure:** The country is usually the most encompassing geographical part of the address, often appearing last.
+                * **Readability:** If the country name is significantly garbled or unreadable from the OCR'd text, it may be difficult to determine the code accurately. Extract what is most legible.
+
+            2.  **Convert to 2-Letter ISO Code:**
+                * Once the most plausible full country name is identified, convert it to its corresponding 2-letter ISO 3166-1 alpha-2 code.
+                * The model should use its general knowledge for this conversion.
+                * *Examples of Mapping:*
+                    * 'India' should result in 'IN'.
+                    * 'United States' or 'USA' should result in 'US'.
+                    * 'Germany' should result in 'DE'.
+                    * 'TANZANIA' (from the seller's address in the example document) would be 'TZ'.
+
+            **Final Output Value for this Field:**
+            The value extracted should **ONLY be the 2-letter ISO country code.**
+
+            **Example (based on the provided document context for the BUYER):**
+                * In the 'CONSIGNEE' address, the country is identified as 'INDIA'.
+                * The 2-letter ISO 3166-1 alpha-2 code for 'INDIA' is 'IN'.
+                * Therefore, the expected output for 'BUYER_COUNTRY' is 'IN'.
+            """,
         },
         {
-            "name": "SELLER NAME",
-            "description": """The full legal name of the individual or company selling the goods or services and issuing the invoice.
-                            Look for labels like 'Seller', 'From', 'Shipper' (if also the seller), 'Exporter', 'Beneficiary', 'Invoice From', or it might be the company name in the letterhead.
-                            Example: 'TRANSCENDIA, INC' [cite: 1] at the top of the document."""
+            "name": "SELLER_NAME",
+            "description": """Extract the full legal name of the company selling the goods or services and issuing the invoice.
+            This name is typically found at the top of the invoice, in the letterhead section, or near labels like 'Seller', 'From', 'Exporter', or 'Beneficiary'.
+
+            **Guidelines for Identification:**
+            1.  **Letterhead Priority:** The company name displayed prominently in the invoice header or letterhead is usually the seller.
+            2.  **Legal Entity:** Prioritize the name that includes a legal suffix (e.g., Ltd, Inc., LLC, Pvt. Ltd) if available, as this often denotes the full legal name.
+            3.  **"Unit of" or "Division of" Scenarios:**
+                * If the letterhead presents a name like 'Trading Name, A Unit of Legal Entity Ltd' or 'Operating Division, Division of Parent Company Inc.', the 'Legal Entity Ltd' or 'Parent Company Inc.' is generally preferred as the full legal name.
+                * However, if 'Trading Name' itself is listed as the 'Beneficiary' for payments and appears to operate as the primary invoicing entity, it may be considered. For consistency, prefer the parent legal entity if clearly stated.
+            4.  **Labels:** Check for explicit labels like 'Seller:', 'Exporter:', 'Beneficiary Name:'. The name associated with these can confirm or be the seller name. In the provided document, 'GOLDEN CASHEWS' is the beneficiary, and "Golden Ventures Ltd" is its parent company. The seller is "Exporters of Raw Cashew Nuts". The name "GOLDEN CASHEWS" is most prominent.
+
+            **Important Considerations for Extraction:**
+            * **OCR Imperfections:** Text from letterheads or logos can sometimes be stylized. Interpret carefully, watching for misrecognized characters.
+            * **Completeness:** Ensure the full name, including any legal suffixes (Ltd., Inc., etc.), is captured if it's part of the identified legal name.
+
+            **Output Format:**
+            Extract the name as a single string.
+
+            **Example Interpretation (based on the provided document):**
+            The header shows 'GOLDEN CASHEWS' prominently, with 'A Unit of Golden Ventures Ltd' underneath. 'GOLDEN CASHEWS' is also the 'BENEFICIARY NAME'.
+            * If strictly seeking the parent legal entity: 'Golden Ventures Ltd'.
+            * If seeking the primary operating name as displayed and used for payment: 'GOLDEN CASHEWS'.
+            For this field, given "full legal name," prioritize the legal entity if distinct: **'Golden Ventures Ltd'**. If the trading name is the only one with clear legal standing (e.g. has "Ltd" itself, or is the only one identified), then use that.
+
+            **Task:** Identify and extract the seller's full legal name based on these guidelines. For the provided document, this would be 'Golden Ventures Ltd'.
+            """,
         },
         {
-            "name": "SELLER ADDRESS",
-            "description": """The complete mailing address of the seller, including street, city, state/province, postal code, and country.
-                            Usually found near the 'SELLER NAME', often in the header or footer of the invoice, or under a 'Remit To' or 'From' section.
-                            Extract the full, multi-line address as a single string. Example: '300 INDUSTRIAL PARKWAY RICHMOND, IN 47374'[cite: 1]. A more complete corporate HQ address might also be '9201 W. Belmont Avenue, Franklin Park, IL 60131'[cite: 27]. Prefer the address most clearly associated with the invoice issuance or seller identity on the primary invoice pages."""
+            "name": "SELLER_ADDRESS",
+            "description": """Extract the complete mailing address of the seller/issuer. This should include all relevant components such as street information, P.O. Box, city, state/province, postal code, and country.
+
+            **Typical Location & Labels:**
+            The seller's address is usually found near the 'SELLER NAME', often in the header or footer of the invoice. It might also be under labels like 'From:', 'Remit To:', or simply be part of the main contact block for the issuing company.
+
+            **Important Considerations for Extraction:**
+            1.  **OCR Imperfections:** Address text, especially if dense, in small font, or a long single line (as in the example document), can be prone to OCR errors or misinterpretations (e.g., '1' vs 'I', misread characters in place names). Extract the most plausible address string based on the visual information. Be aware that unfamiliar place names or abbreviations might be present.
+            2.  **Formatting & Completeness:**
+                * Capture all parts of the address.
+                * If the address is visually presented over multiple distinct lines in the document, preserve these line breaks in the extracted string (e.g., using '\\n' as a separator).
+                * If the address is presented as a single continuous line of text (like in the provided invoice example), extract it as such.
+            3.  **Multiple Addresses:** If multiple seller addresses are present (e.g., corporate HQ vs. remit-to address), prefer the address most clearly associated with the invoice issuance or the seller's primary identity on the main invoice pages.
+
+            **Output Format:**
+            Extract the full address as a single string. If the original address spans multiple lines, use '\\n' to denote line breaks.
+
+            **Example (from the provided document context):**
+            The seller's address is in the header and appears as a single long line: 'PO BOX 1752 PLOT NO 125 BLOCK M NOOKPO RD MCHIGEOLQ IND AREA SONGEA LOWER SONGEA AVENUE KIBEGE STREET DAR ES SALAAM, TANZANIA'. This should be extracted as a single string. If it were formatted on the invoice over several lines, those breaks would be preserved with '\\n'.
+
+            **Task:** Locate and accurately extract the seller's complete mailing address.
+            """,
         },
         {
-            "name": "SELLER COUNTRY",
-            "description": """The country where the seller is officially located or registered.
-                            This is typically the last line of the seller's address or may be explicitly labeled.
-                            Based on the address 'RICHMOND, IN 47374'[cite: 1], the country is implicitly USA. For 'Franklin Park, IL 60131'[cite: 27], it's also USA. Explicitly state "USA" if inferred from state codes like IN or IL."""
+            "name": "SELLER_COUNTRY",
+            "description": """Extract the country where the seller is officially located or registered.
+
+            **Typical Location & Labels:**
+            The country is typically the last component of the seller's full address or may be explicitly labeled (e.g., 'Country: TANZANIA'). It's often found in the invoice header near the seller's name and address.
+
+            **Important Considerations for Extraction:**
+            1.  **OCR Imperfections:** The country name, especially if part of a long address line, might be subject to OCR errors. Interpret common country names even if slightly misspelled (e.g., 'Tanzana' should be recognized as 'TANZANIA').
+            2.  **Address Structure:** Focus on the last distinct geographical entity in the seller's address block.
+            3.  **Inference (USA Specific):** For US addresses, the country "USA" might be inferred from state abbreviations (e.g., 'IN' for Indiana, 'IL' for Illinois implies USA). For other countries, the name is usually explicit.
+            4.  **Readability Issues:** If the country name is significantly garbled, use contextual clues from the city or other address parts if possible.
+
+            **Output Format:**
+            Extract the country name as a single string (e.g., 'TANZANIA', 'INDIA', 'USA').
+
+            **Example (from the provided document context):**
+            The seller's address in the header concludes with 'TANZANIA'. Therefore, the seller country is 'TANZANIA'.
+
+            **Task:** Locate and accurately extract the seller's country from their address.
+            """,
         },
         {
-            "name": "INVOICE CURRENCY", 
-            "description": """The specific currency in which the invoice amounts are denominated (e.g., USD, EUR, GBP, INR).
-                            Look for currency symbols ($, €, £) or currency codes (USD, EUR) next to monetary values, especially the total amount.
-                            Sometimes explicitly stated like 'All amounts in USD'. Example: 'USD' is appended to the amount '$135,750.00 USD'[cite: 3]."""
+            "name": "INVOICE_CURRENCY",
+            "description": """Identify and extract the specific currency in which the invoice amounts are denominated.
+
+            **Typical Location & Labels:**
+            Currency information is often found next to monetary values (especially totals or line item amounts), in column headers of financial tables (e.g., 'Amount USD', 'Price EUR'), or explicitly stated (e.g., 'All amounts in USD'). Look for currency symbols (e.g., $, €, £) or standard currency codes (e.g., USD, EUR, GBP, INR).
+
+            **Important Considerations for Extraction:**
+            1.  **Explicit Codes vs. Symbols:** Prioritize explicit currency codes (like 'USD', 'EUR') if present. If only symbols are found (like '$'), infer the most likely currency based on context (e.g., '$' on an invoice from a US seller often implies USD, but could be CAD, AUD, etc., so explicit codes are better).
+            2.  **Consistency:** Check if the currency is consistently used across multiple monetary fields (line items, totals, payment terms).
+            3.  **OCR Imperfections:** Currency codes or symbols might be misread. 'USO' might be 'USD', 'EUR0' might be 'EUR'.
+            4.  **Absence:** If no currency symbol or code is clearly associated with the main financial amounts, this field might be indeterminable from the visual data alone.
+
+            **Output Format:**
+            Extract the 3-letter ISO 4217 currency code as a string (e.g., 'USD', 'EUR', 'INR').
+
+            **Example (from the provided document context):**
+            The table headers for monetary values are 'Rate USD' and 'Amount USD'. Payment terms also explicitly mention 'USD'. Thus, the currency is 'USD'.
+
+            **Task:** Determine and extract the primary currency used for the invoice transactions.
+            """,
         },
         {
-            "name": "INVOICE AMOUNT/VALUE",
-            "description": """The primary financial value of the invoice, typically the total sum of goods/services before certain taxes or after certain discounts, or the grand total if no other total is more prominent.
-                            Search for terms like 'Total', 'Subtotal', 'Net Amount', 'Invoice Total', 'Grand Total'.
-                            This should be a numerical value. Be careful to distinguish it from line item amounts if a clear overall total is present. Example: '$135,750.00'[cite: 3]."""
+            "name": "INVOICE_AMOUNT_VALUE",
+            "description": """Extract the primary financial value of the invoice, typically the total sum of goods/services listed. This could be a subtotal, a net amount before final charges/taxes, or the grand total if no other total is more prominent or if it's the main sum being invoiced.
+
+            **Typical Location & Labels:**
+            Look for amounts associated with labels like 'Total', 'Subtotal', 'Net Amount', 'Invoice Total', 'Amount Due before Tax'. It's crucial to distinguish this from individual line item amounts if an overall total for the goods/services is present. This value should be numerical.
+
+            **Important Considerations for Extraction:**
+            1.  **Clarity of 'Total':** Identify the most significant sum representing the value of the invoiced items/services. On some invoices, multiple totals exist (e.g., Subtotal, Tax, Grand Total). This field aims for the main sum of the goods/services themselves, which might be a subtotal before other charges, or the grand total if the structure is simple.
+            2.  **Numerical Value Only:** Extract only the numerical value. Do not include currency symbols or codes in this specific field output. Ensure correct parsing of thousands separators (commas) and decimal points if present (e.g., '212,800.00' should be extracted as '212800.00' or '212800').
+            3.  **OCR Imperfections:** Numbers are prone to OCR errors (e.g., '1' vs '7', '0' vs '8'). Validate against calculations if possible (e.g., quantity * rate).
+            4.  **Distinction from other totals:** If 'Grand Total' or 'Total Amount Due' is very distinct and appears to be a final calculation after this sum, this field should capture the sum *before* those final adjustments if it's clearly presented. In simpler invoices, this might be the only total.
+
+            **Output Format:**
+            Extract the numerical value as a string, ideally cleaned of currency symbols and non-essential formatting (e.g., '212800', '1500.75').
+
+            **Example (from the provided document context):**
+            The 'Description of Goods' table shows a 'TOTAL AMOUNT' of '212800'. This represents the sum of the invoiced goods.
+
+            **Task:** Identify and extract the primary total sum for the goods/services listed on the invoice. For this document, it is '212800'.
+            """,
         },
         {
-            "name": "INVOICE AMOUNT/VALUE IN WORDS",
-            "description": """The total invoice amount written out in words (e.g., 'One Hundred Thirty-Five Thousand Seven Hundred Fifty Dollars Only').
-                            This field is often found near the numerical total amount, sometimes labeled 'Amount in Words', 'Say Total', or just appearing as a textual representation of the sum.
-                            This may not always be present. If not found, state null."""
+            "name": "INVOICE_AMOUNT_VALUE_IN_WORDS",
+            "description": """Extract the total invoice amount written out in words (e.g., 'One Hundred Thirty-Five Thousand Seven Hundred Fifty Dollars Only').
+
+            **Typical Location & Labels:**
+            This field is often found near the numerical total amount. It might be labeled 'Amount in Words', 'Say Total', 'In Words', or simply appear as a textual representation of the sum without a specific label.
+
+            **Important Considerations for Extraction:**
+            1.  **Presence:** This field is not always present on invoices. If no amount in words is found, this should be indicated clearly (e.g., by outputting 'null' or an empty string).
+            2.  **OCR Imperfections:** Textual representations of numbers can be long and prone to OCR errors. Extract the most plausible text.
+            3.  **Exact Wording:** Capture the full text as written, including any suffixes like 'Only' or currency mentions if they are part of the worded amount.
+
+            **Output Format:**
+            Extract the amount in words as a single string. If not found, return 'null'.
+
+            **Example (from the provided document context):**
+            This specific proforma invoice does not appear to have the total amount written out in words. In such a case, the output should be 'null'.
+
+            **Task:** Locate and extract the total invoice amount written in words. If it is not present, indicate 'null'.
+            """,
         },
         {
-            "name": "BENEFICIARY ACCOUNT NO / IBAN",
-            "description": """The bank account number or International Bank Account Number (IBAN) of the seller (beneficiary) where the payment should be sent.
-                            Look for labels like 'Account No.', 'A/C No.', 'IBAN', 'Beneficiary Account'. Often found in a 'Bank Details' or 'Payment Instructions' section.
-                            Example: 'Account #: 830769961' for both ACH and Wire[cite: 29]."""
+            "name": "BENEFICIARY_ACCOUNT_NUMBER",
+            "description": """Extract the traditional bank account number of the seller (beneficiary) where payment should be sent. This field is intended for non-IBAN, local account numbers.
+
+            **Typical Location & Labels:**
+            This information is usually found in a 'Bank Details', 'Payment Instructions', or 'Beneficiary Bank Account Details' section.
+            Look for labels like 'Account No.', 'A/C No.', 'Account Number', 'Bank Account Number'. Avoid extracting values clearly labeled and formatted as 'IBAN' for this field.
+
+            **Important Considerations for Extraction:**
+            1.  **Non-IBAN Focus:** Prioritize account numbers that are explicitly labeled as such and are not IBANs.
+            2.  **BBAN Component:** Sometimes, the Basic Bank Account Number (BBAN) component of an IBAN might be displayed separately below or near the full IBAN. If this is clearly the case, and it's presented as a distinct account number, it may be captured here. For instance, if an IBAN is 'XX12345YYYYYYYYY' and 'YYYYYYYYY' is shown on a separate line labeled 'Account No.', 'YYYYYYYYY' could be extracted.
+            3.  **Accuracy:** Account numbers are critical; ensure precise extraction.
+            4.  **OCR Imperfections:** Numbers can be misread by OCR. Interpret carefully.
+            5.  **Absence:** If only an IBAN is provided, or no traditional account number is found, this field should be 'null' or empty.
+
+            **Output Format:**
+            Extract the account number as a single string. If not found or only an IBAN is relevant, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The document lists 'IBAN:IT2710503438100000000127869' and on the next line '000000127869'[cite: 5]. The number '000000127869' is the BBAN portion of the IBAN. If the requirement is to capture a separately displayed BBAN when an IBAN is also present, this value ('000000127869') could be extracted. If a *completely distinct* non-IBAN local account number were present, that would be preferred. If only the IBAN line was present, this field would be 'null'.
+
+            **Task:** Locate and accurately extract the beneficiary's traditional (non-IBAN) bank account number.
+            """,
         },
         {
-            "name": "BENEFICIARY BANK",
-            "description": """The name of the bank where the seller (beneficiary) holds their account.
-                            Search for labels such as 'Bank Name', 'Beneficiary Bank', 'Bank', 'Payable to Bank'.
-                            This is usually listed in the payment instructions or bank details section. Example: 'JPMorgan Chase'[cite: 29]."""
+            "name": "BENEFICIARY_IBAN",
+            "description": """Extract the International Bank Account Number (IBAN) of the seller (beneficiary) where the payment should be sent. This field should ONLY capture IBANs.
+
+            **Typical Location & Labels:**
+            This information is usually found in a dedicated 'Bank Details', 'Payment Instructions', or 'Beneficiary Bank Account Details' section.
+            Look specifically for the label 'IBAN'.
+
+            **Important Considerations for Extraction:**
+            1.  **IBAN Identification:** An IBAN typically starts with a two-letter country code (e.g., 'IT' for Italy[cite: 5], 'DE' for Germany, 'GB' for Great Britain) followed by check digits and the basic bank account number. Ensure the extracted value matches this structure and is labeled as IBAN.
+            2.  **Specificity:** Only extract the value if it is explicitly identified as an IBAN. Do not extract other account numbers for this field.
+            3.  **Accuracy:** If an IBAN is found, ensure precise extraction, including all alphanumeric characters.
+            4.  **OCR Imperfections:** IBANs are alphanumeric and can be misread by OCR (e.g., '0' vs 'O', 'I' vs 'L', '5' vs 'S'). Interpret carefully.
+            5.  **Absence:** If no IBAN is explicitly stated or identifiable, this field should be 'null' or empty.
+
+            **Output Format:**
+            Extract the IBAN as a single string. If no IBAN is found, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The document's 'Banca d'Appoggio / Bank' section explicitly lists 'IBAN:IT2710503438100000000127869'[cite: 5]. This value should be extracted.
+
+            **Task:** Locate and accurately extract the beneficiary's IBAN. If no IBAN is present, output 'null'.
+            """,
         },
         {
-            "name": "BENEFICIARY BANK ADDRESS",
-            "description": """The full mailing address of the seller's (beneficiary's) bank.
-                            Look for this information near the beneficiary bank's name or within the 'Bank Details' section.
-                            It should include street, city, and country. Example: 'New York, NY 10017'[cite: 29]."""
+            "name": "BENEFICIARY_BANK",
+            "description": """Extract the name of the bank where the seller (beneficiary) holds their account for payment.
+
+            **Typical Location & Labels:**
+            This information is usually found in a 'Bank Details', 'Payment Instructions', or 'Beneficiary Bank Account Details' section, often near the account number or IBAN.
+            Look for labels like 'Bank Name', 'Beneficiary Bank', 'Bank', 'Payable to Bank', 'Banca d'Appoggio'.
+
+            **Important Considerations for Extraction:**
+            1.  **Clarity:** Extract the official name of the bank.
+            2.  **OCR Imperfections:** Bank names can be misread, especially if they are part of a dense text block or stylized.
+            3.  **Association:** Ensure the bank name extracted is clearly associated with the beneficiary's account details for receiving payment for *this* invoice.
+            4.  **Absence:** If the bank name is not explicitly provided in the relevant sections, this field should be 'null' or empty.
+
+            **Output Format:**
+            Extract the bank name as a single string. If not found, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` shows an IBAN under 'Banca d'Appoggio / Bank'[cite: 5], but the actual name of the bank is not explicitly stated in this section or clearly nearby in the provided text. Therefore, for this document, based on the provided information, the output would be 'null'. If a name like 'XYZ Bank Italia' were present, that would be extracted.
+
+            **Task:** Locate and accurately extract the beneficiary's bank name. If not found, indicate 'null'.
+            """,
         },
         {
-            "name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE / ROUTING NO", # Spelling from user, expanded
-            "description": """The unique identification code for the seller's (beneficiary's) bank. This could be a SWIFT/BIC code (for international payments),
-                            ABA Routing Number (for US payments), Sort Code (UK), BSB (Australia), IFSC (India), etc.
-                            Look for labels like 'SWIFT Code', 'BIC', 'ABA No.', 'Routing No.', 'IFSC', 'Sort Code', 'BSB'. Example: 'Swift Code: CHASUS33' or 'ABA (Routing) #: 071000013' (for ACH) or 'Bank Routing Number: 021000021' (for Wire)[cite: 29]. Prioritize SWIFT if available for international context, or the most relevant routing for the transaction type."""
+            "name": "BENEFICIARY_BANK_ADDRESS",
+            "description": """Extract the full mailing address of the seller's (beneficiary's) bank.
+
+            **Typical Location & Labels:**
+            This information is usually found within the 'Bank Details', 'Payment Instructions', or 'Beneficiary Bank Account Details' section, typically co-located with the beneficiary bank's name and account number/IBAN.
+            Look for a complete address (street, city, country) associated directly with the beneficiary's bank.
+
+            **Important Considerations for Extraction:**
+            1.  **Association with Bank:** Ensure the address extracted is clearly for the beneficiary's bank and not the seller's own business address, unless they are explicitly stated to be the same (which is rare for a bank address).
+            2.  **Completeness:** If found, the address should ideally include street information, city, postal/zip code, and country.
+            3.  **OCR Imperfections:** Address blocks can be dense and prone to OCR errors. Interpret carefully.
+            4.  **Absence:** If the beneficiary bank's address is not provided in the relevant sections, this field should be 'null' or empty. The absence of the bank's name often implies the absence of its address as well.
+
+            **Output Format:**
+            Extract the full address as a single string. If the original address spans multiple lines, use '\\n' to denote line breaks. If not found, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` lists an IBAN under 'Banca d'Appoggio / Bank' but does not explicitly state the beneficiary bank's name or its address in that section or elsewhere in the provided text. Therefore, for this document, the output would be 'null'. If a bank address like 'Via Roma 1, 50100 Florence, Italy' were present for the beneficiary bank, that would be extracted.
+
+            **Task:** Locate and accurately extract the beneficiary bank's full mailing address. If not found, indicate 'null'.
+            """,
         },
         {
-            "name": "Total Invoice Amount",
-            "description": """The final, definitive total monetary sum due on the invoice, inclusive of all items, charges, taxes (if applicable and included in the final sum), and less any deductions reflected in the total.
-                            This is often labeled 'Grand Total', 'Total Amount Due', 'Total Invoice Value', 'Please Pay This Amount'.
-                            It should be the ultimate figure the buyer is expected to pay. Example: '$135,750.00 USD' [cite: 3] (appears as the main extension and final sum in this proforma)."""
+            "name": "BENEFICIARY_BANK_CODE",
+            "description": """Extract the unique identification code for the seller's (beneficiary's) bank. This could be a SWIFT/BIC code (for international payments), ABA Routing Number (for US payments), Sort Code (UK), BSB (Australia), IFSC (India), or other relevant national bank clearing codes.
+
+            **Typical Location & Labels:**
+            This code is usually found in the 'Bank Details', 'Payment Instructions', or 'Beneficiary Bank Account Details' section, often alongside the bank name and account number/IBAN.
+            Look for labels like 'SWIFT Code', 'BIC' (Bank Identifier Code), 'ABA No.', 'Routing No.', 'IFSC', 'Sort Code', 'BSB', or similar.
+
+            **Important Considerations for Extraction:**
+            1.  **Type of Code:** Identify the type of code if labeled (e.g., SWIFT, ABA). If unlabeled, extract the alphanumeric code found in the expected location.
+            2.  **Accuracy:** These codes are critical for payment routing; ensure precise extraction.
+            3.  **OCR Imperfections:** Alphanumeric codes are prone to OCR errors (e.g., '0' vs 'O', '1' vs 'I', '5' vs 'S', 'B' vs '8').
+            4.  **Prioritization:** For international invoices, a SWIFT/BIC code is most common. For domestic payments, national codes like ABA, IFSC, etc., are used. If multiple codes are present, the prompt might need to specify which to prioritize, or this specific field might target one type (e.g., a separate field for SWIFT and another for ABA). For this general field, extract any that is clearly a bank identifier code.
+            5.  **Absence:** If no such bank identification code is found, this field should be 'null' or empty.
+
+            **Output Format:**
+            Extract the code as a single string. If not found, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` provides an IBAN for the beneficiary bank [cite: 5] but does not explicitly list a SWIFT/BIC code or any other bank routing code in the 'Banca d'Appoggio / Bank' section or elsewhere in the provided text. Therefore, for this document, the output would be 'null'. If a code like 'PASCITM1FLO' were present, that would be extracted.
+
+            **Task:** Locate and accurately extract the beneficiary bank's SWIFT/BIC or other relevant routing code. If not found, indicate 'null'.
+            """,
         },
         {
-            "name": "Invoice Amount", # Repeated field, ensure description helps differentiate or confirms synonymity
-            "description": """This field typically refers to the primary sum of the invoice. It can be synonymous with 'Total Invoice Amount' if only one total is presented.
-                            If there are multiple totals (e.g., Subtotal, Total before Tax, Grand Total), this should ideally capture the most representative invoiced amount, often the grand total.
-                            Verify if it's distinct from other amounts like 'Subtotal'. In many cases, it will be the same as 'Total Invoice Amount'. Example: '$135,750.00 USD'[cite: 3]."""
+            "name": "TOTAL_INVOICE_AMOUNT",
+            "description": """Extract the final, definitive total monetary sum due on the invoice. This amount should be inclusive of all items, charges, and taxes (if applicable and included in the final sum), and less any deductions reflected directly in this final total.
+
+            **Typical Location & Labels:**
+            This value is often the most prominent total on the invoice. Look for labels such as 'Grand Total', 'Total Amount Due', 'Total Invoice Amount', 'Total Invoice Value', 'Please Pay This Amount', 'Net Total', 'Totale Fattura', 'Totale da pagare'.
+
+            **Important Considerations for Extraction:**
+            1.  **Definitive Total:** Ensure this is the ultimate figure the buyer is expected to pay. If multiple totals are present (e.g., Subtotal, Total with Tax), this should be the final one.
+            2.  **Numerical Value Only:** Extract only the numerical value. Do not include currency symbols or codes in this field's output (currency is typically a separate field). Ensure correct parsing of thousands separators (e.g., periods in European formats, commas in US formats) and decimal points/commas.
+            3.  **OCR Imperfections:** Numbers are susceptible to OCR errors (e.g., '8' vs '3', '5' vs '6'). Cross-verify with other totals or sums if possible.
+            4.  **Clarity and Prominence:** This amount is usually clearly set apart and emphasized.
+
+            **Output Format:**
+            Extract the numerical value as a string, representing the exact monetary amount (e.g., '82.590,00', '15075.50').
+
+            **Example (from the `INVOICE.pdf` context):**
+            The document explicitly states 'Totale Fattura / Total Invoice Amount' as '82.590,00 EUR'[cite: 11]. The value '82.590,00' should be extracted for this field.
+
+            **Task:** Locate and accurately extract the final total amount due on the invoice.
+            """,
         },
         {
-            "name": "Beneficiary Name", # Often the same as Seller Name
-            "description": """The name of the ultimate recipient of the funds, usually the seller or exporter.
-                            Look for labels like 'Beneficiary', 'Payable to', 'Beneficiary Name'. This is often the same as the 'SELLER NAME'.
-                            Confirm if explicitly stated in a 'Payment Details' or 'Beneficiary Information' section. Example: 'Transcendia, Inc. - Depository'[cite: 29]. If just 'Transcendia, Inc.' is listed as seller[cite: 1], use that if more direct."""
+            "name": "INVOICE_AMOUNT",
+            "description": """Extract the primary sum of the invoice. This often refers to the main total amount and can be synonymous with 'TOTAL_INVOICE_AMOUNT' if only one definitive total is presented. If multiple totals exist (e.g., Subtotal, Total before Tax, Grand Total), this should ideally capture the most representative invoiced amount, frequently the grand total.
+
+            **Typical Location & Labels:**
+            This can be found near labels like 'Invoice Amount', 'Total', 'Net Amount', or it might be the same figure as 'Grand Total' or 'Total Amount Due'.
+
+            **Important Considerations for Extraction:**
+            1.  **Synonymity with Total:** In many invoices, like the example document, this will be identical to the 'TOTAL_INVOICE_AMOUNT'. The purpose is to capture the main financial figure of the invoice.
+            2.  **Numerical Value Only:** Extract only the numerical value, excluding currency symbols or codes. Handle decimal and thousands separators appropriately.
+            3.  **OCR Imperfections:** Be cautious of OCR errors in numerical figures.
+            4.  **Contextual Understanding:** If the invoice structure is complex with multiple totals, identify which figure best represents the 'Invoice Amount' before specific deductions or charges if it's meant to be different from a final 'Grand Total'. For most straightforward invoices, it will be the main or grand total.
+
+            **Output Format:**
+            Extract the numerical value as a string (e.g., '82.590,00', '15075.50').
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` shows 'Totale Fattura / Total Invoice Amount' as '82.590,00 EUR'[cite: 11]. There is no other distinct 'Invoice Amount' that differs from this total. Thus, for this document, the 'INVOICE_AMOUNT' is also '82.590,00'.
+
+            **Task:** Identify and extract the primary invoice amount.
+            """,
         },
         {
-            "name": "Beneficiary Address", # Often the same as Seller Address
-            "description": """The full address of the beneficiary (seller/exporter) to whom the payment is directed.
-                            This is commonly the same as the 'SELLER ADDRESS'. Check for specific 'Beneficiary Address' details if provided separately in payment instructions.
-                            Example: '9201 W. Belmont Avenue Franklin Park, IL 60131' [cite: 29] associated with the beneficiary name."""
+            "name": "BENEFICIARY_NAME",
+            "description": """Extract the name of the ultimate recipient of the funds for this invoice, who is typically the seller or exporter.
+
+            **Typical Location & Labels:**
+            Look for labels such as 'Beneficiary', 'Beneficiary Name', 'Payable to', 'Pay To'. This name is often found in the 'Bank Details' or 'Payment Instructions' section.
+            If not explicitly labeled as 'Beneficiary', this is almost always the same as the 'SELLER_NAME'.
+
+            **Important Considerations for Extraction:**
+            1.  **Primary Identification:** The goal is to identify the party to whom the payment is owed.
+            2.  **Seller as Beneficiary:** If no separate beneficiary name is listed in the payment section, assume the seller is the beneficiary and use the extracted 'SELLER_NAME'.
+            3.  **Consistency:** Check if the name in the letterhead/seller identification matches any name given in the payment details.
+            4.  **OCR Imperfections:** Names can be subject to OCR errors; extract the most plausible and complete name.
+            5.  **Completeness:** Include any legal suffixes (e.g., Srl, Ltd., Inc.) if they are part of the name.
+
+            **Output Format:**
+            Extract the name as a single string.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The seller is identified as 'La Marzocco Srl'[cite: 1, 13]. The bank details section [cite: 5] does not specify a different beneficiary name. Therefore, the 'BENEFICIARY_NAME' is 'La Marzocco Srl'.
+
+            **Task:** Identify and extract the beneficiary's name.
+            """,
         },
         {
-            "name": "DESCRIPTION OF GOODS",
-            "description": """A detailed account of the products or services being invoiced.
-                            This is usually found in the main table or line items section of the invoice. It can include product names, codes, specifications, or service descriptions.
-                            Extract all relevant descriptive text for each line item, or a summary if it's a very long list.
-                            Example: 'HA Laminating Film 984mm X 1,829 LM Rolls'[cite: 3]. If multiple items, list them or summarize."""
+            "name": "BENEFICIARY_ADDRESS",
+            "description": """Extract the full mailing address of the beneficiary (typically the seller/exporter) to whom the payment is directed.
+
+            **Typical Location & Labels:**
+            This address is commonly the same as the 'SELLER_ADDRESS'. Look for it in the seller's contact information section or header. If specific 'Beneficiary Address' details are provided separately in payment instructions, those should be prioritized.
+
+            **Important Considerations for Extraction:**
+            1.  **Seller's Address as Default:** If no distinct beneficiary address is given in payment instructions, use the seller's primary business address.
+            2.  **Multiple Seller Addresses:** If the seller has multiple addresses listed (e.g., registered office, operational address), use the one most relevant for correspondence or invoicing, often the operational or main address, unless payment instructions specify otherwise. This should be consistent with what is extracted for 'SELLER_ADDRESS' if the beneficiary is the seller.
+            3.  **Completeness:** Ensure the full address is captured, including street, city, postal code, state/province, and country.
+            4.  **OCR Imperfections:** Address text can be dense and prone to errors.
+            5.  **Formatting:** Preserve multi-line formatting using '\\n' if the address is presented over multiple lines.
+
+            **Output Format:**
+            Extract the full address as a single string, using '\\n' for line breaks if applicable.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The beneficiary is 'La Marzocco Srl'. The document lists their 'Sede Operativa ed Amministrativa' as 'Via La Torre 14/Н 50038 Scarperia e San Piero (FI) - Italia' [cite: 1] and 'Sede Legale' as 'Viale G. Matteotti, 25 50121 FIRENZE (FI)'[cite: 13]. Assuming the operational address is the primary one for such purposes unless specified otherwise, this would be 'Via La Torre 14/Н\\n50038 Scarperia e San Piero (FI) - Italia'.
+
+            **Task:** Identify and extract the beneficiary's full mailing address.
+            """,
         },
         {
-            "name": "QUANTITY OF GOODS",
-            "description": """The amount or number of units for each item or service listed on the invoice.
-                            Look for columns labeled 'Quantity', 'Qty', 'Units', 'No. of Items'.
-                            Specify units if mentioned (e.g., pcs, kgs, hrs, SM). Example: '75,000 SM' (Square Meters)[cite: 3]."""
+            "name": "DESCRIPTION_OF_GOODS",
+            "description": """Extract a detailed account of all products or services being invoiced. This is usually found in the main table or line items section of the invoice and can include product names, codes, specifications, or service descriptions.
+
+            **Typical Location & Labels:**
+            Look for columns labeled 'Description', 'Description of Goods', 'Item Description', 'Details', or similar within the line items table.
+
+            **Important Considerations for Extraction:**
+            1.  **Multiple Items:** If there are multiple line items, extract the description for each.
+            2.  **Multi-line Descriptions:** Individual item descriptions may span multiple lines. Capture all relevant descriptive text, preserving internal line breaks if they add clarity.
+            3.  **Concatenation/Formatting:** Combine descriptions from all line items into a single string. Use a clear separator (e.g., a double newline '\\n\\n' or a specific marker like 'ITEM_SEPARATOR') between the descriptions of distinct items or POs if not itemizing.
+            4.  **Completeness vs. Summary:** Extract all relevant descriptive text for each line item. Summarize only if the list is exceptionally long and a summary is explicitly allowed. For most cases, full descriptions are preferred.
+            5.  **OCR Imperfections:** Descriptions can contain alphanumeric codes, special characters, and mixed case text, which can be prone to OCR errors. Interpret carefully.
+
+            **Output Format:**
+            Extract as a single string. For multiple items, concatenate their descriptions, preserving internal newlines and using a consistent separator (e.g., '\\n\\n') between descriptions of different items.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The invoice lists descriptions for three POs/items. The extracted string should combine these, for instance:
+            'LINEA PB 2GR AV ABR HW 220V CE [cite: 9]\\nLA MARZOCCO ESPRESSO COFFEE MACHINE [cite: 9]\\nMACHINE FULLY EQUIPPED [cite: 9]\\nColour-ACCIAIO LUCIDO [cite: 9]\\nOptional kit - High Legs [cite: 9]\\n\\nLINEA PB 2GR AV ABR HW 220V CE [cite: 9]\\nLA MARZOCCO ESPRESSO COFFEE MACHINE [cite: 9]\\nMACHINE FULLY EQUIPPED [cite: 9]\\nColour-ACCIAIO LUCIDO [cite: 9]\\nOptional kit - High Legs [cite: 9]\\n\\nCUSTOMS DOCS FEE [cite: 9]'
+
+            **Task:** Locate and accurately extract all descriptions of goods or services listed on the invoice.
+            """,
         },
         {
-            "name": "PAYMENT TERMS",
-            "description": """The conditions agreed upon for payment of the invoice, such as the timeframe and method.
-                            Search for labels like 'Payment Terms', 'Terms of Payment', 'Terms'.
-                            Examples include 'Net 30 days', 'Due Upon Receipt', '50% Advance, 50% on Delivery'.
-                            Example: '50% advance and balance 50% after 60 days from the date of Bill of Lading (BL)'[cite: 3]. Also see 'Standard Payment terms - Net 30' [cite: 33] on a general info page, but prefer terms on the invoice itself."""
+            "name": "QUANTITY_OF_GOODS",
+            "description": """Extract the amount or number of units for each item or service listed on the invoice, including the unit of measure if specified.
+
+            **Typical Location & Labels:**
+            Look for columns labeled 'Quantity', 'Qty', 'Units', 'No. of Items', 'U.M.' (Unit of Measure), 'Unit' within the line items table.
+
+            **Important Considerations for Extraction:**
+            1.  **Multiple Items:** If there are multiple line items, extract the quantity for each.
+            2.  **Units of Measure:** If a unit of measure (e.g., PC, KG, EA, HRS, M, LBS) is specified alongside the quantity, include it.
+            3.  **Concatenation/Formatting:** For multiple items, list each quantity and its unit. Combine these into a single string using a clear separator (e.g., a semicolon '; ' or newline '\\n').
+            4.  **Numerical Accuracy:** Ensure quantities are extracted accurately as numbers.
+            5.  **OCR Imperfections:** Numbers and unit abbreviations can be misread.
+
+            **Output Format:**
+            Extract as a single string. For multiple items, list each quantity with its unit, separated by a consistent delimiter (e.g., '; ' or '\\n'). Example: '2 PC; 10 PC; 1 PC'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The invoice lists quantities and units (U.M.) for three items:
+            - Item 1: Q.ty '2', U.M. 'PC' [cite: 9]
+            - Item 2: Q.ty '10', U.M. 'PC' [cite: 9]
+            - Item 3: Q.ty '1', U.M. 'PC' [cite: 9]
+            The extracted string could be '2 PC; 10 PC; 1 PC'.
+
+            **Task:** Locate and accurately extract the quantities for all goods or services, including their units of measure if available.
+            """,
         },
         {
-            "name": "BENEFICIARY/SELLER'S SIGNATURE",
-            "description": """The handwritten or digital signature of the authorized representative of the seller/beneficiary, or the typed name if a physical signature is replaced by it in a digital document.
-                            Look for a signature line or block often labeled 'Seller's Signature', 'Authorized Signature', 'For [Seller Company Name]'.
-                            This may not always be present, or could be a scanned image. Describe if present (e.g., "Signature present", "Typed name: Diana McGehee"). Example: 'Diana McGehee' typed below 'Sr Customer Service'[cite: 3], which might represent authorization."""
+            "name": "PAYMENT_TERMS",
+            "description": """Extract the conditions agreed upon for payment of the invoice, such as the timeframe, percentage due, and method specifics if included in the terms.
+
+            **Typical Location & Labels:**
+            Search for labels like 'Payment Terms', 'Terms of Payment', 'Terms', 'Condizioni pagamento'. This information is often found in the header, footer, or a dedicated section of the invoice.
+
+            **Important Considerations for Extraction:**
+            1.  **Completeness:** Capture the full text of the payment terms as stated. This can include percentages, due dates relative to an event (e.g., 'Net 30 days', 'Due Upon Receipt'), or specific conditions like 'Letter of Credit'.
+            2.  **Clarity:** Ensure the extracted text accurately reflects the conditions.
+            3.  **OCR Imperfections:** Terms can sometimes be in smaller print or complex phrasing, so careful OCR interpretation is needed.
+            4.  **Distinction from Method:** While related, payment terms (e.g., 'Net 30') are distinct from the payment method (e.g., 'Bank Transfer'). This field is for the terms themselves.
+
+            **Output Format:**
+            Extract the payment terms as a single string.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The document states 'Condizioni pagamento / Payment Terms' as '100% advanced'. This is the value to be extracted.
+
+            **Task:** Locate and accurately extract the payment terms stated on the invoice.
+            """,
         },
         {
-            "name": "APPLICANT/BUYER'S SIGNATURE",
-            "description": """The handwritten or digital signature of the authorized representative of the applicant/buyer, acknowledging the invoice or associated order.
-                            Look for a signature line or block often labeled 'Buyer's Signature', 'Authorized Signature', 'Accepted By', 'For [Buyer Company Name]'.
-                            This is less common on invoices themselves unless it's a proforma being accepted, but more common on related Purchase Orders. Example: 'Authorised Signatory' with a signature for 'For Arrow Business Advisory Private Limited' [cite: 4] at the bottom, indicating acceptance/issuance from buyer's perspective on a document they might have prepared or signed."""
+            "name": "BENEFICIARY_SELLER_SIGNATURE",
+            "description": """Identify the handwritten or digital signature of the authorized representative of the seller/beneficiary. This can also be a typed name if it clearly serves as an authorization in place of a physical signature.
+
+            **Typical Location & Labels:**
+            Look for a signature line or block, often at the bottom of the invoice, labeled 'Seller's Signature', 'Authorized Signature', 'For [Seller Company Name]', or similar.
+
+            **Important Considerations for Extraction:**
+            1.  **Nature of Signature:** Determine if it's a handwritten signature (often an image, may be described as 'Signature present'), a digital signature mark, or a typed name of an individual authorized to sign. A typed company name in a footer is generally not considered a signature for this purpose unless explicitly stated as 'Authorized by [Company Name]'.
+            2.  **Authorization:** The key is whether it represents authorization from the seller.
+            3.  **Presence:** This field may not always be present or legible. If a signature image is present but unreadable, "Signature present" might be appropriate. If a typed name (of an individual) acts as authorization, extract that name.
+            4.  **Absence:** If no clear signature or authorizing typed individual name is found, this field should be 'null'.
+
+            **Output Format:**
+            Describe the signature if present (e.g., "Handwritten signature present", "Typed name: John Doe, Manager") or return 'null' if absent.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` does not show a clear handwritten signature or a typed name of an individual acting as an authorized signatory for La Marzocco Srl. While the company name "La Marzocco Srl" appears at the bottom, it serves more as company identification in the footer rather than a specific authorization signature by an individual. Therefore, the output would be 'null'. If, for example, 'Giovanni Rossi, Sales Director' was typed in a signature area, that would be extracted.
+
+            **Task:** Identify and describe the beneficiary/seller's signature or authorizing typed name. If absent, indicate 'null'.
+            """,
         },
         {
-            "name": "MODE OF REMITTANCE",
-            "description": """The method by which the payment is to be made (e.g., Wire Transfer, ACH, Cheque, Credit Card).
-                            This information is often found within the 'Payment Instructions', 'Bank Details', or 'Payment Terms' sections.
-                            The document shows 'ACH & Wire Transfer Instructions' [cite: 29] and mentions 'Credit cards are accepted' [cite: 32] and 'Remit to Address for Checks'[cite: 31]. List all applicable or the primary ones mentioned in context of this transaction."""
+            "name": "APPLICANT_BUYER_SIGNATURE",
+            "description": """Identify the handwritten or digital signature of the authorized representative of the applicant/buyer, or a typed name if it clearly serves as an authorization or acceptance.
+
+            **Typical Location & Labels:**
+            Look for a signature line or block, often at the bottom of the document, potentially labeled 'Buyer's Signature', 'Authorized Signature', 'Accepted By', 'For [Buyer Company Name]', or similar. This is less common on invoices than on Purchase Orders or contracts.
+
+            **Important Considerations for Extraction:**
+            1.  **Nature of Signature:** Determine if it's a handwritten signature, a digital signature mark, or a typed name of an individual clearly indicating acceptance or authorization on behalf of the buyer. A typed company name alone is generally not a signature unless part of an explicit acceptance statement.
+            2.  **Context of Acceptance:** The signature should ideally signify the buyer's acknowledgment or acceptance of the invoice terms or order.
+            3.  **Presence:** This field is often not present on standard invoices. If not found, it should be 'null'. If a signature image is present but unreadable, "Signature present" might be appropriate. If a typed name (of an individual) acts as authorization, extract that name.
+            4.  **Distinction:** Be careful not to confuse this with the seller's signature or other incidental text.
+
+            **Output Format:**
+            Describe the signature if present (e.g., "Handwritten signature present", "Typed name: Jane Smith, Procurement Manager") or return 'null' if absent.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` does not show a clear handwritten signature or a typed name of an individual from 'THREE ONE COFFEE ENGINEERING PVT LTD.' acting as an authorized signatory in a designated acceptance block. The text 'THREE ONE COFFEE ENGINEERING PVT. LTD. Director' appears but its context as a signature for the invoice is unclear. Therefore, the output would likely be 'null'.
+
+            **Task:** Identify and describe the applicant/buyer's signature or authorizing typed name. If absent, indicate 'null'.
+            """,
         },
         {
-            "name": "MODE OF TRANSIT",
-            "description": """The method of transportation used for shipping the goods (e.g., Sea, Air, Road, Rail).
-                            Look for labels like 'Ship Via', 'Mode of Shipment', 'Transport Mode', 'By'.
-                            Example: 'Ship Via Ocean'[cite: 2], 'Mode of Shipment SEA'[cite: 12]."""
+            "name": "MODE_OF_REMITTANCE",
+            "description": """Extract the method by which the payment for the invoice is expected to be made.
+
+            **Typical Location & Labels:**
+            This information is often found within 'Payment Instructions', 'Bank Details', 'Payment Terms' sections, or under labels like 'Payment Method', 'Mode of Payment', 'Pay Method', 'Mod, pagamento'.
+
+            **Important Considerations for Extraction:**
+            1.  **Clarity:** Extract the specific method mentioned (e.g., Wire Transfer, ACH, Bank Transfer, Cheque, Credit Card).
+            2.  **Multiple Methods:** If multiple methods are listed as acceptable, list all of them or the primary one if indicated.
+            3.  **OCR Imperfections:** Ensure accurate extraction of the payment method text.
+
+            **Output Format:**
+            Extract the mode(s) of remittance as a string. If multiple, separate with a semicolon or list them.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The document states 'Mod, pagamento/Pay Method' as 'BANK TRANSFER'. This is the value to be extracted.
+
+            **Task:** Locate and accurately extract the mode of remittance.
+            """,
         },
         {
-            "name": "INCO TERM",
-            "description": """The Incoterm (International Commercial Term) specifies the responsibilities of buyers and sellers in international trade (e.g., EXW, FOB, CIF, DDP).
-                            Look for labels like 'Incoterms', 'Terms of Sale', 'Freight Terms', or a three-letter code often followed by a location.
-                            Example: 'EX-Works Richmond IN' [cite: 2] (EXW is the Incoterm)."""
+            "name": "MODE_OF_TRANSIT",
+            "description": """Extract the method of transportation used or to be used for shipping the goods (e.g., Sea, Air, Road, Rail, Ocean).
+
+            **Typical Location & Labels:**
+            Look for labels such as 'Ship Via', 'Mode of Shipment', 'Transport Mode', 'Method of Dispatch', 'Carrier', 'By'. This information might be near shipping details, Incoterms, or port information.
+
+            **Important Considerations for Extraction:**
+            1.  **Explicit Statement:** Prioritize explicitly stated modes of transit.
+            2.  **Inference:** Sometimes it might be inferred from other details (e.g., 'Port of Loading' might imply 'Sea'), but explicit statements are preferred. Incoterms like CIF or FOB might imply a sea shipment but don't solely define the mode on the invoice itself.
+            3.  **Absence:** This information is not always present on all types of invoices, especially proforma invoices issued before shipping arrangements are finalized. If not found, indicate 'null'.
+
+            **Output Format:**
+            Extract the mode of transit as a string. If not found, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` does not explicitly state the 'Mode of Transit'. While it mentions 'Ex Works' Incoterms, the actual mode (Sea, Air, Road) is not specified. Therefore, the output would be 'null'.
+
+            **Task:** Locate and accurately extract the mode of transit. If not found, indicate 'null'.
+            """,
         },
         {
-            "name": "HS CODE",
-            "description": """The Harmonized System (HS) code or HTS (Harmonized Tariff Schedule) code, which is an international nomenclature for the classification of products.
-                            It allows customs authorities to identify products and apply duties and taxes. Look for labels like 'HS Code', 'HTS Code', 'Tariff Code'.
-                            This is more common on Commercial or Customs Invoices. May not be present on all Proformas. If not found, state null."""
+            "name": "INCO_TERM",
+            "description": """Extract the Incoterm (International Commercial Term) which specifies the responsibilities of buyers and sellers in the transaction.
+
+            **Typical Location & Labels:**
+            Look for labels like 'Incoterms', 'Terms of Sale', 'Freight Terms', 'Delivery Terms', 'Resa merce'. The Incoterm is usually a three-letter code (e.g., EXW, FOB, CIF, DDP) often followed by a named place or port.
+
+            **Important Considerations for Extraction:**
+            1.  **Full Term:** Extract the full Incoterm as stated, including the code and any associated named place (e.g., 'EXW Scarperia', 'FOB Shanghai Port').
+            2.  **Accuracy:** Ensure the three-letter code and the place name are captured correctly.
+            3.  **Standard Terms:** Be familiar with common Incoterms.
+
+            **Output Format:**
+            Extract the Incoterm and any associated location as a single string.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The document states 'Resa merce/Incoterms' as 'Ex Works'. This is the value to be extracted. If a location was specified, like 'Ex Works Scarperia', that full string would be extracted.
+
+            **Task:** Locate and accurately extract the Incoterm.
+            """,
         },
         {
-            "name": "Intermediary Bank (Field 56)", # Existing field
-            "description": """Details of any intermediary bank (correspondent bank) that is used to route the payment from the buyer's bank to the seller's (beneficiary's) bank.
-                            Often referred to by 'Field 56' in SWIFT messages. Look for labels like 'Intermediary Bank', 'Correspondent Bank', or specific SWIFT field references if available.
-                            This may not always be present or required. If not found, state null."""
+            "name": "HS_CODE",
+            "description": """Extract the Harmonized System (HS) code or Harmonized Tariff Schedule (HTS) code for the products listed on the invoice.
+
+            **Typical Location & Labels:**
+            HS codes are usually found within the line item details in the main table, associated with each product description or item number. Look for labels like 'HS Code', 'HTS Code', 'Tariff Code', 'Customs Code'.
+
+            **Important Considerations for Extraction:**
+            1.  **Format:** HS codes are typically sequences of numbers (usually 6 digits for the international standard, but can be longer for national subdivisions).
+            2.  **Association:** Ensure the code is clearly linked to a product being invoiced.
+            3.  **Presence:** HS Codes are more common on commercial invoices used for customs clearance rather than all proforma invoices. If not found, indicate 'null'.
+            4.  **Multiple Items:** If different items have different HS codes, list all of them, clearly associating them with their items if possible, or list them separated by semicolons or newlines.
+
+            **Output Format:**
+            Extract the HS code(s) as a string. If multiple, separate them clearly. If not found, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` does not appear to list any HS Codes for the items. Therefore, the output would be 'null'. If a code like '8419.81' was listed for an espresso machine, that would be extracted.
+
+            **Task:** Locate and accurately extract the HS Code(s). If not found, indicate 'null'.
+            """,
         },
         {
-            "name": "INTERMEDIARY BANK NAME",
-            "description": """The name of the intermediary bank, if one is specified in the payment instructions.
-                            This would be under a section labeled 'Intermediary Bank'. If no such section or bank is named, state null."""
+            "name": "INTERMEDIARY_BANK_DETAILS",
+            "description": """Extract details of any intermediary bank (also known as a correspondent bank) if specified in the payment instructions. This bank is used to route payment from the buyer's bank to the seller's (beneficiary's) bank. Information might be referred to by 'Field 56' in SWIFT message contexts.
+
+            **Typical Location & Labels:**
+            Look for sections specifically labeled 'Intermediary Bank', 'Correspondent Bank', or payment routing instructions that detail an additional bank in the payment chain.
+
+            **Important Considerations for Extraction:**
+            1.  **Explicit Mention:** Only extract information if an intermediary bank is explicitly mentioned.
+            2.  **Information to Capture:** This could include the intermediary bank's name, address, SWIFT/BIC code, or account number held with them for the beneficiary bank. The exact details to capture would depend on what's provided. This prompt aims for a general capture of any details provided under such a heading.
+            3.  **Absence:** This information is not always required or provided. If no intermediary bank details are found, this field should be 'null'.
+
+            **Output Format:**
+            Extract all provided details for the intermediary bank as a single string (e.g., "Bank Name, SWIFT Code, City, Country"). If not found, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` does not mention any Intermediary Bank or Correspondent Bank details in its payment instructions. Therefore, the output would be 'null'.
+
+            **Task:** Locate and extract any specified intermediary bank details. If absent, indicate 'null'.
+            """,
         },
         {
-            "name": "INTERMEDIARY BANK ADDRESS",
-            "description": """The full address of the intermediary bank, if specified.
-                            This information would be found along with the intermediary bank's name. If not present, state null."""
+            "name": "INTERMEDIARY_BANK_NAME",
+            "description": """Extract the name of the intermediary bank, if one is specified in the payment instructions.
+
+            **Typical Location & Labels:**
+            This would be found under a section labeled 'Intermediary Bank', 'Correspondent Bank', or similar.
+
+            **Important Considerations for Extraction:**
+            1.  **Specificity:** Ensure the extracted name is explicitly for an intermediary or correspondent bank, not the beneficiary bank itself.
+            2.  **Absence:** If no intermediary bank is named, this field should be 'null'.
+
+            **Output Format:**
+            Extract the intermediary bank's name as a single string. If not found, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` does not name an Intermediary Bank. Therefore, the output would be 'null'.
+
+            **Task:** Locate and accurately extract the intermediary bank's name. If not found, indicate 'null'.
+            """,
         },
         {
-            "name": "INTERMEDIARY BANK COUNTRY",
-            "description": """The country where the intermediary bank is located, if specified.
-                            Typically part of the intermediary bank's address. If not present, state null."""
+            "name": "INTERMEDIARY_BANK_ADDRESS",
+            "description": """Extract the full mailing address of the intermediary bank, if one is specified.
+
+            **Typical Location & Labels:**
+            This information would be found along with the intermediary bank's name, under a section like 'Intermediary Bank' or 'Correspondent Bank'.
+
+            **Important Considerations for Extraction:**
+            1.  **Association:** Ensure the address is for the intermediary bank.
+            2.  **Completeness:** If found, include street, city, country, etc.
+            3.  **Absence:** If no intermediary bank details (name or address) are provided, this field should be 'null'.
+
+            **Output Format:**
+            Extract the full address as a single string, using '\\n' for line breaks if applicable. If not found, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` does not provide details for an Intermediary Bank. Therefore, the output for its address would be 'null'.
+
+            **Task:** Locate and accurately extract the intermediary bank's full address. If not found, indicate 'null'.
+            """,
         },
         {
-            "name": "Party Name ( Applicant )", # Existing field
-            "description": """The name of the party applying for a service related to the invoice, often the buyer/importer, especially in the context of a Letter of Credit or financing.
-                            On an invoice, this is usually synonymous with the 'BUYER NAME'.
-                            Look for labels like 'Applicant', or infer from the 'Buyer' or 'Bill To' details. Example: 'Arrow Business Advisory Pvt. Ltd'[cite: 4]."""
+            "name": "INTERMEDIARY_BANK_COUNTRY",
+            "description": """Extract the country where the intermediary bank is located, if one is specified.
+
+            **Typical Location & Labels:**
+            This would typically be part of the intermediary bank's address, found in a section detailing the intermediary or correspondent bank.
+
+            **Important Considerations for Extraction:**
+            1.  **Address Component:** Identify the country from the full address of the intermediary bank.
+            2.  **Absence:** If no intermediary bank address is provided, or if the country is not specified within that address, this field should be 'null'.
+
+            **Output Format:**
+            Extract the country name as a single string. If not found, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` does not provide details for an Intermediary Bank. Therefore, the output for its country would be 'null'.
+
+            **Task:** Locate and accurately extract the intermediary bank's country. If not found, indicate 'null'.
+            """,
         },
         {
-            "name": "Party Name ( Beneficiary )", # Existing field
-            "description": """The name of the party who is the beneficiary of the payment or transaction related to the invoice, typically the seller/exporter.
-                            On an invoice, this is usually synonymous with the 'SELLER NAME' or 'BENEFICIARY NAME'.
-                            Example: 'TRANSCENDIA, INC'[cite: 1], or more specifically 'Transcendia, Inc. - Depository'[cite: 29]."""
+            "name": "PARTY_NAME_APPLICANT",
+            "description": """Extract the name of the applicant, which on an invoice typically refers to the buyer, customer, or the party being billed.
+
+            **Typical Location & Labels:**
+            This information is usually found in sections labeled 'Bill To:', 'Customer:', 'Buyer:', 'To:', 'Ship To:' (if same as Bill To), or 'Applicant:'.
+
+            **Important Considerations for Extraction:**
+            1.  **Role Identification:** Ensure the name extracted is that of the party receiving the invoice and responsible for payment (the buyer/customer).
+            2.  **Completeness:** Extract the full name of the company or individual, including any legal suffixes (e.g., Pvt Ltd, Inc, Srl).
+            3.  **OCR Imperfections:** Company names can be misread; extract the most plausible and complete name.
+
+            **Output Format:**
+            Extract the name as a single string.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The 'Bill to:' and 'Ship to:' sections both list 'THREE ONE COFFEE ENGINEERING PVT LTD.'[cite: 6, 7]. This is the applicant/buyer.
+
+            **Task:** Identify and extract the applicant's (buyer's) name.
+            """,
         },
         {
-            "name": "Party Country ( Beneficiary )", 
-            "description": """The country where the beneficiary (seller/exporter) is located.
-                            This is typically the country of the 'SELLER ADDRESS' or 'BENEFICIARY ADDRESS'.
-                            Example: USA (inferred from IN [cite: 1] or IL [cite: 29])."""
+            "name": "PARTY_NAME_BENEFICIARY",
+            "description": """Extract the name of the party who is the beneficiary of the payment or transaction related to the invoice. This is typically the seller/exporter.
+
+            **Typical Location & Labels:**
+            This name is usually the same as the 'SELLER_NAME' or the previously defined 'BENEFICIARY_NAME'. It's the entity issuing the invoice and receiving the payment. Look for the main company name in the letterhead or under specific labels like 'Beneficiary' in payment sections if distinct from the seller's main identity.
+
+            **Important Considerations for Extraction:**
+            1.  **Primary Identification:** Identify the ultimate recipient of the funds.
+            2.  **Synonymous with Seller:** On most invoices, this will be the seller's name.
+            3.  **Completeness:** Extract the full name, including any legal suffixes (e.g., Srl, Ltd, Inc.).
+            4.  **OCR Imperfections:** Company names can be subject to OCR errors.
+
+            **Output Format:**
+            Extract the name as a single string.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The seller, and therefore the beneficiary of the payment, is 'La Marzocco Srl'.
+
+            **Task:** Identify and extract the beneficiary's (seller's) name.
+            """,
         },
         {
-            "name": "Party Type ( Beneficiary Bank )", # Existing field
-            "description": """The role or classification of the beneficiary's bank (e.g., 'Beneficiary Bank', 'Depository Bank').
-                            This might be explicitly stated or inferred from its function of receiving funds for the beneficiary.
-                            Example: 'Beneficiary Bank' is implied for JPMorgan Chase[cite: 29]."""
+            "name": "PARTY_COUNTRY_BENEFICIARY",
+            "description": """Extract the country where the beneficiary (typically the seller/exporter) is officially located or registered.
+
+            **Typical Location & Labels:**
+            This is generally the country found in the 'SELLER_ADDRESS' or 'BENEFICIARY_ADDRESS'. It's usually the last component of the address or explicitly stated.
+
+            **Important Considerations for Extraction:**
+            1.  **Based on Address:** Determine the country from the beneficiary's (seller's) main address on the invoice.
+            2.  **OCR Imperfections:** Country names can be misread.
+            3.  **Standard Name:** Use the standard English name of the country if possible (e.g., 'Italy' instead of 'Italia', though 'Italia' is also understandable).
+
+            **Output Format:**
+            Extract the country name as a single string.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The beneficiary (La Marzocco Srl) is located in 'Italia' [cite: 1] (Italy).
+
+            **Task:** Identify and extract the beneficiary's (seller's) country.
+            """,
         },
         {
-            "name": "Party Name ( Beneficiary Bank )", # Existing field, space before closing parenthesis
-            "description": """The name of the bank that holds the account for the beneficiary (seller/exporter).
-                            This is the same as 'BENEFICARY BANK'. Example: 'JPMorgan Chase'[cite: 29]."""
+            "name": "PARTY_TYPE_BENEFICIARY_BANK",
+            "description": """Extract the role or classification of the beneficiary's bank (e.g., 'Beneficiary Bank', 'Depository Bank', 'Receiving Bank').
+
+            **Typical Location & Labels:**
+            This might be explicitly stated, or inferred from the section where the beneficiary's bank details are provided (e.g., a bank listed under 'Beneficiary Bank Details' is implicitly the 'Beneficiary Bank'). Labels like 'Banca d'Appoggio' also indicate this role.
+
+            **Important Considerations for Extraction:**
+            1.  **Inference from Context:** If not explicitly labeled, the type is usually inferred from its function of holding the beneficiary's account for payment.
+            2.  **Common Terms:** 'Beneficiary Bank' is a common and generally applicable term if no other specific classification is given.
+
+            **Output Format:**
+            Extract the party type as a string.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The bank details are listed under 'Banca d'Appoggio / Bank'[cite: 5], which translates to Supporting Bank or Depository Bank. This clearly indicates its role as the 'Beneficiary Bank'.
+
+            **Task:** Identify and extract the type or role of the beneficiary's bank.
+            """,
         },
         {
-            "name": "Party Country ( Beneficiary Bank )", # Existing field, space before closing parenthesis
-            "description": """The country where the beneficiary's bank is located.
-                            This is the country of the 'BENEFICAIRY BANK ADDRESS'. Example: USA (inferred from 'New York, NY' [cite: 29])."""
+            "name": "PARTY_NAME_BENEFICIARY_BANK",
+            "description": """Extract the name of the bank that holds the account for the beneficiary (typically the seller/exporter). This is synonymous with the 'BENEFICIARY_BANK' field.
+
+            **Typical Location & Labels:**
+            This information is usually found in a 'Bank Details', 'Payment Instructions', or 'Beneficiary Bank Account Details' section. Look for labels like 'Bank Name', 'Beneficiary Bank', 'Bank', 'Payable to Bank', 'Banca d'Appoggio'.
+
+            **Important Considerations for Extraction:**
+            1.  **Clarity:** Extract the official name of the bank.
+            2.  **Association:** Ensure the bank name extracted is clearly associated with the beneficiary's account details for receiving payment.
+            3.  **Absence:** If the bank name is not explicitly provided in the relevant sections, this field should be 'null'. This often occurs if only an IBAN is provided without the bank's name alongside it.
+
+            **Output Format:**
+            Extract the bank name as a single string. If not found, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` shows an IBAN under 'Banca d'Appoggio / Bank' but does not explicitly state the beneficiary bank's name in that section or clearly nearby in the provided text. Therefore, for this document, the output would be 'null'.
+
+            **Task:** Locate and accurately extract the beneficiary's bank name. If not found, indicate 'null'.
+            """,
         },
         {
-            "name": "Drawee Address", # Existing field
-            "description": """The name and address of the party on whom a draft or bill of exchange (if applicable to the transaction) is drawn.
-                            This is often the buyer or the buyer's bank. If no draft is mentioned or involved, this may not be applicable.
-                            Look for terms like 'Drawee'. On a standard invoice, this might be the Buyer's address if they are the direct payer. Example: If a draft is drawn on the buyer, it would be the buyer's address '159 Mittal Industrial Estate...India'[cite: 4]."""
+            "name": "PARTY_COUNTRY_BENEFICIARY_BANK",
+            "description": """Extract the country where the beneficiary's bank is located.
+
+            **Typical Location & Labels:**
+            This information would typically be part of the beneficiary bank's address, found in the 'Bank Details' or 'Payment Instructions' section. It can also often be reliably inferred from the first two letters of the IBAN (the country code).
+
+            **Important Considerations for Extraction:**
+            1.  **Explicit vs. Inferred:** If the bank's address (including country) is explicitly stated, use that. If not, the country can be inferred from the IBAN's country code (e.g., 'IT' in an IBAN indicates Italy, 'DE' indicates Germany).
+            2.  **Accuracy of Inference:** Ensure the inference from the IBAN is based on the standard two-letter ISO country code.
+            3.  **Absence:** If no bank address is provided and no IBAN is present from which to infer the country, this field should be 'null'.
+
+            **Output Format:**
+            Extract the country name as a single string.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The beneficiary's IBAN provided is 'IT2710503438100000000127869'[cite: 5]. The 'IT' prefix indicates that the bank is located in Italy. Therefore, the output is 'Italy'.
+
+            **Task:** Locate and accurately extract the beneficiary bank's country, inferring from the IBAN if necessary and explicitly stated otherwise.
+            """,
         },
         {
-            "name": "PORT OF LOADING", # Existing field
-            "description": """The specific port or airport where the goods are loaded onto the main international transport vessel, aircraft, or vehicle for export.
-                            Look for labels like 'Port of Loading', 'POL', 'From Port', 'Airport of Departure', 'Place of Receipt' (if it's the start of main carriage).
-                            Example: 'Richmond IN' is mentioned under 'Freight EX-Works'[cite: 2], suggesting it's the point of origin/loading for an EXW term."""
+            "name": "DRAWEE_ADDRESS",
+            "description": """Extract the full name and address of the drawee, the party on whom a bill of exchange or draft (if applicable to the transaction) is drawn. On a standard invoice without mention of such instruments, the drawee is generally considered the buyer/importer who is responsible for payment.
+
+            **Typical Location & Labels:**
+            Look for terms like 'Drawee'. If no specific drawee is mentioned, this typically defaults to the buyer's name and address as listed in 'Bill To:' or 'Customer Details'.
+
+            **Important Considerations for Extraction:**
+            1.  **Context of Drawee:** Understand if a bill of exchange is involved. If not, the buyer's details are usually appropriate.
+            2.  **Full Address:** Capture the complete name and address, including street, city, postal code, state/province, and country.
+            3.  **Absence:** If the invoice is not related to a bill of exchange and buyer information is also missing, this field might be 'null'.
+
+            **Output Format:**
+            Extract the full name and address as a single string, using '\\n' for line breaks within the address.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The invoice does not mention a specific bill of exchange or a separately identified drawee. Therefore, the drawee is considered to be the buyer. The buyer is 'THREE ONE COFFEE ENGINEERING PVT LTD.' [cite: 6] and their address is 'DMG-180, TULSIWADI\\nBHANJIBHAI RATHOD ROAD\\nTARDEO, MUMBAI\\n400034 MAHARASTRA\\nINDIA'[cite: 7]. This full name and address should be extracted.
+
+            **Task:** Identify and extract the drawee's full name and address.
+            """,
         },
         {
-            "name": "PORT OF DISCHARGE", # Existing field
-            "description": """The specific port or airport where the goods are to be unloaded from the main international transport after arrival in the destination country.
-                            Look for labels like 'Port of Discharge', 'POD', 'To Port', 'Airport of Destination', 'Place of Delivery' (if it's the end of main carriage).
-                            Example: 'Nhava Sheva Port' [cite: 2] mentioned under 'Ship Via' and also as delivery location in PO[cite: 17]."""
+            "name": "PORT_OF_LOADING",
+            "description": """Extract the specific port, airport, or place where the goods are loaded onto the main international transport vessel, aircraft, or vehicle for export. This can also be the 'Place of Receipt' if it signifies the start of the main carriage.
+
+            **Typical Location & Labels:**
+            Look for labels such as 'Port of Loading', 'POL', 'From Port', 'Airport of Departure', 'Place of Loading', 'Shipped From'. This information is often found in the shipping details section of an invoice or related transport documents. For Incoterms like EXW (Ex Works), the place of loading is the seller's premises or another named place where the buyer takes possession.
+
+            **Important Considerations for Extraction:**
+            1.  **Named Place:** This should be a specific geographical location (city, port name, airport code).
+            2.  **Incoterm Context:** Pay attention to the Incoterms used (e.g., for EXW, the 'Port of Loading' is the seller's named place of delivery; for FOB, it's a specified port).
+            3.  **Absence:** If no port or place of loading is explicitly mentioned or clearly inferable, this field should be 'null'.
+
+            **Output Format:**
+            Extract the location name as a single string. Include any relevant context if helpful (e.g., 'Scarperia e San Piero (FI) - Italia (Ex Works)').
+
+            **Example (from the `INVOICE.pdf` context):**
+            The invoice specifies the Incoterm as 'Ex Works'. The seller (La Marzocco Srl) is located in 'Scarperia e San Piero (FI) - Italia'. Therefore, the place of loading is effectively the seller's premises in Scarperia. An appropriate extraction would be 'Scarperia e San Piero (FI) - Italia (Ex Works)'.
+
+            **Task:** Identify and extract the port or place of loading.
+            """,
         },
         {
-            "name": "VESSEL TYPE",
-            "description": """The general type of transport conveyance used for the main leg of the journey (e.g., 'Vessel', 'Aircraft', 'Truck', 'Container Ship').
-                            This may be inferred from 'Mode of Transit' (e.g., if 'Ocean' or 'Sea', then 'Vessel').
-                            Example: 'Ocean' implies a vessel[cite: 2]. If 'SEA' is mentioned[cite: 12], it also implies a vessel."""
+            "name": "PORT_OF_DISCHARGE",
+            "description": """Extract the specific port, airport, or place where the goods are to be unloaded from the main international transport after arrival in the destination country. This can also be the 'Place of Final Delivery' if it signifies the end of the main carriage.
+
+            **Typical Location & Labels:**
+            Look for labels such as 'Port of Discharge', 'POD', 'To Port', 'Airport of Destination', 'Place of Unloading', 'Final Destination' (if a port/airport). This information is usually found in the shipping details section.
+
+            **Important Considerations for Extraction:**
+            1.  **Named Place:** This should be a specific geographical location.
+            2.  **Destination Context:** This is the entry point into the buyer's country or the final agreed delivery point for the main transport.
+            3.  **Absence:** This is often specified on Bills of Lading or Commercial Invoices. It may not always be present on a Pro Forma Invoice, especially if shipping arrangements are not finalized or are the buyer's responsibility (e.g., under Ex Works terms). If not found, indicate 'null'.
+
+            **Output Format:**
+            Extract the location name as a single string.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` is a proforma invoice with Incoterms 'Ex Works'[cite: 12], meaning the buyer is responsible for shipment from the seller's premises. The buyer is in Mumbai, India[cite: 6, 7]. While a port in/near Mumbai (e.g., Nhava Sheva, Mumbai Port) would be the likely destination port, it is not explicitly stated on this document. Therefore, the output would be 'null'.
+
+            **Task:** Identify and extract the port or place of discharge. If not found, indicate 'null'.
+            """,
         },
         {
-            "name": "VESSEL NAME", # Existing field
-            "description": """The specific name of the ship or vessel carrying the goods, or the flight number if by air, or voyage number.
-                            Look for labels like 'Vessel Name', 'Voyage No.', 'Flight No.', 'Carrier Name'.
-                            This is often found in shipping details sections. May not be present on a proforma invoice issued long before shipment. If not found, state null."""
+            "name": "VESSEL_TYPE",
+            "description": """Extract the general type of transport conveyance used or anticipated for the main leg of the journey for the goods (e.g., 'Vessel', 'Container Ship', 'Aircraft', 'Cargo Plane', 'Truck', 'Rail Car').
+
+            **Typical Location & Labels:**
+            This information might be found near shipping details, 'Mode of Transit', or specific conveyance identifiers. Labels could include 'Type of Vessel', 'Conveyance Type', or it might be inferred if the 'Mode of Transit' (e.g., 'Ocean Freight', 'Air Freight') is specified.
+
+            **Important Considerations for Extraction:**
+            1.  **Inference from Mode of Transit:** If 'Mode of Transit' is 'Sea' or 'Ocean', 'Vessel' or 'Container Ship' (if more specific details are available) could be inferred. If 'Air', then 'Aircraft' or 'Cargo Plane'.
+            2.  **Specificity:** Extract the most specific type mentioned.
+            3.  **Absence:** This information may not be present, especially on proforma invoices where transport details are not yet finalized or are the buyer's responsibility (e.g., under EXW Incoterms). If not found or clearly inferable, indicate 'null'.
+
+            **Output Format:**
+            Extract the vessel/conveyance type as a string. If not found, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` does not specify the 'Mode of Transit' and uses 'Ex Works' Incoterms[cite: 12]. As such, the specific type of vessel or conveyance for the main transport is not detailed by the seller. Therefore, the output would be 'null'.
+
+            **Task:** Identify and extract the type of vessel or main transport conveyance. If not found or inferable, indicate 'null'.
+            """,
         },
         {
-            "name": "THIRD PARTY EXPORTER NAME", # Existing field
-            "description": """The name of a third-party exporter, if different from the primary seller listed on the invoice.
-                            This situation arises if another company handles the export formalities or is named as the exporter of record for other reasons.
-                            Look for distinct fields like 'Third Party Exporter', or if the 'Exporter' field names a different entity than the 'Seller' or 'Beneficiary'. If not mentioned or not applicable, state null."""
+            "name": "VESSEL_NAME_VOYAGE_FLIGHT_NO",
+            "description": """Extract the specific name of the ship or vessel carrying the goods, or the flight number if transport is by air, or the voyage number if applicable.
+
+            **Typical Location & Labels:**
+            Look for labels such as 'Vessel Name', 'Name of Ship', 'Voyage No.', 'Flight No.', 'Carrier Name' (if it refers to a specific vessel/flight rather than the shipping line). This is often found in shipping details sections.
+
+            **Important Considerations for Extraction:**
+            1.  **Specificity:** This refers to the unique identifier of a specific transport conveyance, not just the type.
+            2.  **Context:** Ensure it's the identifier for the main international transport.
+            3.  **Absence:** This information is often not available on proforma invoices, especially when shipping arrangements are not yet made or are handled by the buyer (e.g., EXW terms). If not found, indicate 'null'.
+
+            **Output Format:**
+            Extract the name or number as a single string. If not found, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` is a proforma invoice with 'Ex Works' Incoterms[cite: 12]. Specific shipping details like vessel name or flight number are not provided. Therefore, the output would be 'null'.
+
+            **Task:** Identify and extract the vessel name, voyage number, or flight number. If not found, indicate 'null'.
+            """,
         },
         {
-            "name": "THIRD PARTY EXPORTER COUNTRY", # Existing field
-            "description": """The country of the third-party exporter, if such a party is named.
-                            This would be part of the third-party exporter's address details. If no third-party exporter is mentioned, state null."""
-        }
-    ]
+            "name": "THIRD_PARTY_EXPORTER_NAME",
+            "description": """Extract the name of a third-party exporter, if this entity is different from the primary seller listed on the invoice and is explicitly mentioned as handling export formalities or being the exporter of record.
+
+            **Typical Location & Labels:**
+            Look for specific fields such as 'Third Party Exporter', 'Exporter (if different from Seller)', or if the 'Exporter' field clearly names an entity different from the one identified as the 'Seller' or 'Beneficiary'.
+
+            **Important Considerations for Extraction:**
+            1.  **Distinction from Seller:** This field is specifically for an exporter entity that is *not* the main seller. If the seller is also the exporter (which is common), this field should be 'null'.
+            2.  **Explicit Mention:** Only extract a name if a third-party exporter is clearly and explicitly identified.
+            3.  **Absence:** If not mentioned or not applicable (i.e., the seller is the sole exporter), this field should be 'null'.
+
+            **Output Format:**
+            Extract the name as a single string. If not found or not applicable, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            The `INVOICE.pdf` is issued by 'La Marzocco Srl', who is also the manufacturer and seller. There is no indication or mention of a separate third-party exporter. Therefore, the output for this field would be 'null'.
+
+            **Task:** Identify and extract the name of a third-party exporter, if specified as distinct from the seller. If not specified, indicate 'null'.
+            """,
+        },
+        {
+            "name": "THIRD_PARTY_EXPORTER_COUNTRY",
+            "description": """Extract the country of the third-party exporter, if such a party is named on the invoice and is distinct from the primary seller.
+
+            **Typical Location & Labels:**
+            This information would be part of the third-party exporter's address details, typically found if a third-party exporter's name and address are provided.
+
+            **Important Considerations for Extraction:**
+            1.  **Prerequisite:** A third-party exporter must first be identified. If no third-party exporter is named, this field will be 'null'.
+            2.  **Address Component:** If a third-party exporter is listed, extract the country from their provided address.
+            3.  **Absence:** If no third-party exporter is mentioned, or if their country is not specified, this field should be 'null'.
+
+            **Output Format:**
+            Extract the country name as a single string. If not found or not applicable, return 'null'.
+
+            **Example (from the `INVOICE.pdf` context):**
+            As no third-party exporter is mentioned in the `INVOICE.pdf`, their country cannot be extracted. Therefore, the output for this field would be 'null'.
+
+            **Task:** Identify and extract the country of the third-party exporter, if specified. If not applicable, indicate 'null'.
+            """,
+        },
+    ],
 }
 
 # --- Processing Configuration ---
-MAX_WORKERS = 4 # Adjust based on CPU cores and API limits for parallel processing
+MAX_WORKERS = 4  # Adjust based on CPU cores and API limits for parallel processing
 TEMP_DIR = "temp_processing"
 OUTPUT_FILENAME = "extracted_data.xlsx"
 
 # --- Logging Configuration ---
 LOG_FILE = "app_log.log"
-LOG_LEVEL = "INFO" # DEBUG, INFO, WARNING, ERROR, CRITICAL
+LOG_LEVEL = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 # --- NEW: Classification Prompt Template ---
 CLASSIFICATION_PROMPT_TEMPLATE = """
@@ -1763,4 +2526,3 @@ EXTRACTION_PROMPT_TEMPLATE = """
 
 Important: Your response must be ONLY the valid JSON object. No greetings, apologies, or any text outside the JSON structure.
 """
-
