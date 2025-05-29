@@ -1321,6 +1321,7 @@ DOCUMENT_FIELDS = {
     """,
         },
     ],
+    
     "INVOICE": [
         {
             "name": "TYPE OF INVOICE - COMMERCIAL/PROFORMA/CUSTOMS",
@@ -2377,6 +2378,7 @@ CLASSIFICATION_PROMPT_TEMPLATE = """
 
 **Acceptable Document Types:**
 {acceptable_types_str}
+Strictly classify the document ONLY amongst the acceptable document types.
 
 **Detailed Instructions for Classification:**
 

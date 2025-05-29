@@ -323,6 +323,41 @@ def _extract_data_from_document(case_id: str, base_name: str, document_files: li
         log.exception(f"Unexpected Error during {context}. Error: {e}")
         return {"error": f"Unexpected Error: {e}"}
 
+MAX_EXCEL_CELL_LENGTH = 32700
+TRUNCATION_ELLIPSIS = "..."
+
+def sanitize_excel_string(text):
+    """
+    Sanitizes a string for Excel compatibility by:
+    1. Removing illegal XML characters (Excel uses XML format).
+    2. Truncating the string if it exceeds MAX_EXCEL_CELL_LENGTH, adding an ellipsis.
+    """
+    if not isinstance(text, str):
+        return text # Return non-strings as is
+
+    # 1. Remove characters that are illegal in XML 1.0 (and thus often problematic in Excel)
+    # Valid XML 1.0 characters:
+    # #x9 (tab), #xA (newline), #xD (carriage return),
+    # [#x20-#xD7FF], [#xE000-#xFFFD], [#x10000-#x10FFFF]
+    # This regex removes characters outside these valid ranges,
+    # specifically targeting common control characters other than tab, newline, carriage return.
+    try:
+        text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
+    except TypeError: # Should not happen with the isinstance check, but as a safeguard
+        return text
+
+
+    # 2. Truncate if string is too long
+    if len(text) > MAX_EXCEL_CELL_LENGTH:
+        # Ensure there's enough space for the ellipsis itself
+        if MAX_EXCEL_CELL_LENGTH > len(TRUNCATION_ELLIPSIS):
+            text = text[:MAX_EXCEL_CELL_LENGTH - len(TRUNCATION_ELLIPSIS)] + TRUNCATION_ELLIPSIS
+        else:
+            # If max_length is too short for ellipsis, just truncate to max_length
+            text = text[:MAX_EXCEL_CELL_LENGTH]
+            
+    return text
+
 # --- Main Processing Function ---
 def process_zip_file(zip_file_path: str):
     """
@@ -335,6 +370,8 @@ def process_zip_file(zip_file_path: str):
     """
     final_results_list = [] # Store final row data here
     output_excel_path = Path(OUTPUT_FILENAME)
+
+    start_time = time.time()
 
     with tempfile.TemporaryDirectory(prefix="doc_proc_", dir=TEMP_DIR) as temp_dir_str:
         temp_dir = Path(temp_dir_str)
@@ -520,10 +557,20 @@ def process_zip_file(zip_file_path: str):
         else:
             log.info(f"Creating DataFrame from {len(final_results_list)} aggregated results.")
             df = pd.DataFrame(final_results_list)
+
+            # --- SANITIZE DATAFRAME ---
+            log.info("Sanitizing DataFrame content for Excel compatibility...")
+            for col in df.columns:
+                # Apply sanitization only to columns that are likely to contain strings
+                if df[col].dtype == 'object':
+                    # Using .astype(str) first to handle potential mixed types (like numbers mistakenly as objects)
+                    # before applying string operations, though sanitize_excel_string already checks isinstance(text, str).
+                    df[col] = df[col].astype(str).apply(sanitize_excel_string)
+            # --- END SANITIZATION ---
+
             # Reorder columns: Case Info, Status, Classification Info, then Extracted Fields
             cols = df.columns.tolist()
             core_cols = ["CASE_ID", "GROUP_Basename", "Processing_Status", "CLASSIFIED_Type", "CLASSIFICATION_Confidence", "CLASSIFICATION_Reasoning"]
-            # Ensure core cols exist and move them to the front
             ordered_cols = [c for c in core_cols if c in cols]
             extracted_cols = sorted([c for c in cols if c not in core_cols])
             df = df[ordered_cols + extracted_cols]
@@ -532,9 +579,13 @@ def process_zip_file(zip_file_path: str):
             log.info(f"Saving aggregated data to Excel: {output_excel_path}")
             df.to_excel(output_excel_path, index=False, engine='openpyxl')
             log.info("Excel file saved successfully.")
+            elapsed_time = time.time() - start_time
+            log.info(f"Total processing time for {zip_file_path}: {elapsed_time:.2f} seconds.")
             return str(output_excel_path)
         except Exception as e:
             log.exception(f"Failed to save DataFrame to Excel file '{output_excel_path}': {e}")
+            elapsed_time = time.time() - start_time
+            log.error(f"Processing failed after {elapsed_time:.2f} seconds while saving Excel.")
             raise RuntimeError(f"Failed to save results to Excel: {e}")
 
     # End of `with tempfile.TemporaryDirectory`
