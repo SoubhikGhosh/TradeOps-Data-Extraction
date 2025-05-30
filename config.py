@@ -1324,7 +1324,7 @@ DOCUMENT_FIELDS = {
     
     "INVOICE": [
         {
-            "name": "TYPE OF INVOICE - COMMERCIAL/PROFORMA/CUSTOMS",
+            "name": "TYPE OF INVOICE - COMMERCIAL/PROFORMA/CUSTOMS", 
             "description": """The explicit classification of the invoice document based on its title and purpose.
                             Search for prominent titles like 'COMMERCIAL INVOICE', 'PROFORMA INVOICE', 'TAX INVOICE', 'CUSTOMS INVOICE', 'INVOICE', 'PROFORMA', 'PI', 'PO'.
                             - **COMMERCIAL INVOICE:** A final bill.
@@ -1335,7 +1335,7 @@ DOCUMENT_FIELDS = {
                             """,
         },
         {
-            "name": "INVOICE_DATE",
+            "name": "INVOICE DATE",
             "description": """Extract the specific date when the invoice or proforma invoice was created or issued by the seller/issuer.
 
             **Typical Location & Labels:**
@@ -1358,7 +1358,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "INVOICE_NO",
+             "name": "INVOICE NO",
             "description": """Extract the unique alphanumeric identifier assigned to this specific invoice or proforma invoice by the seller/issuer.
 
             **Typical Location & Labels:**
@@ -1381,7 +1381,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "BUYER_NAME",
+           "name": "BUYER NAME",
             "description": """Extract the full legal name of the individual or company purchasing the goods or services, often referred to as the buyer or consignee.
 
             **Typical Location & Labels:**
@@ -1403,7 +1403,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "BUYER_ADDRESS",
+             "name": "BUYER ADDRESS",
             "description": """Extract the complete mailing address of the buyer or consignee from the provided text.
             This information is typically found under headings like 'CONSIGNEE:', 'Bill To:', 'Deliver To:', or 'Buyer:'.
 
@@ -1424,7 +1424,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "BUYER_COUNTRY",
+            "name": "BUYER COUNTRY",
             "description": """First, identify the full name of the country where the buyer is officially located or registered from their address details.
             This is often the last line or a prominent part of the buyer's address block (e.g., under 'CONSIGNEE:', 'Bill To:').
             Second, based on the identified full country name, provide its standard 2-letter ISO 3166-1 alpha-2 country code.
@@ -1455,7 +1455,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "SELLER_NAME",
+            "name": "SELLER NAME",
             "description": """Extract the full legal name of the company selling the goods or services and issuing the invoice.
             This name is typically found at the top of the invoice, in the letterhead section, or near labels like 'Seller', 'From', 'Exporter', or 'Beneficiary'.
 
@@ -1484,7 +1484,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "SELLER_ADDRESS",
+            "name": "SELLER ADDRESS",
             "description": """Extract the complete mailing address of the seller/issuer. This should include all relevant components such as street information, P.O. Box, city, state/province, postal code, and country.
 
             **Typical Location & Labels:**
@@ -1508,7 +1508,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "SELLER_COUNTRY",
+            "name": "SELLER COUNTRY",
             "description": """Extract the country where the seller is officially located or registered.
 
             **Typical Location & Labels:**
@@ -1530,7 +1530,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "INVOICE_CURRENCY",
+            "name": "INVOICE CURRENCY", 
             "description": """Identify and extract the specific currency in which the invoice amounts are denominated.
 
             **Typical Location & Labels:**
@@ -1552,7 +1552,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "INVOICE_AMOUNT_VALUE",
+            "name": "INVOICE AMOUNT/VALUE",
             "description": """Extract the primary financial value of the invoice, typically the total sum of goods/services listed. This could be a subtotal, a net amount before final charges/taxes, or the grand total if no other total is more prominent or if it's the main sum being invoiced.
 
             **Typical Location & Labels:**
@@ -1574,7 +1574,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "INVOICE_AMOUNT_VALUE_IN_WORDS",
+            "name": "INVOICE AMOUNT/VALUE IN WORDS",
             "description": """Extract the total invoice amount written out in words (e.g., 'One Hundred Thirty-Five Thousand Seven Hundred Fifty Dollars Only').
 
             **Typical Location & Labels:**
@@ -1595,31 +1595,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "BENEFICIARY_ACCOUNT_NUMBER",
-            "description": """Extract the traditional bank account number of the seller (beneficiary) where payment should be sent. This field is intended for non-IBAN, local account numbers.
-
-            **Typical Location & Labels:**
-            This information is usually found in a 'Bank Details', 'Payment Instructions', or 'Beneficiary Bank Account Details' section.
-            Look for labels like 'Account No.', 'A/C No.', 'Account Number', 'Bank Account Number'. Avoid extracting values clearly labeled and formatted as 'IBAN' for this field.
-
-            **Important Considerations for Extraction:**
-            1.  **Non-IBAN Focus:** Prioritize account numbers that are explicitly labeled as such and are not IBANs.
-            2.  **BBAN Component:** Sometimes, the Basic Bank Account Number (BBAN) component of an IBAN might be displayed separately below or near the full IBAN. If this is clearly the case, and it's presented as a distinct account number, it may be captured here. For instance, if an IBAN is 'XX12345YYYYYYYYY' and 'YYYYYYYYY' is shown on a separate line labeled 'Account No.', 'YYYYYYYYY' could be extracted.
-            3.  **Accuracy:** Account numbers are critical; ensure precise extraction.
-            4.  **OCR Imperfections:** Numbers can be misread by OCR. Interpret carefully.
-            5.  **Absence:** If only an IBAN is provided, or no traditional account number is found, this field should be 'null' or empty.
-
-            **Output Format:**
-            Extract the account number as a single string. If not found or only an IBAN is relevant, return 'null'.
-
-            **Example (from the `INVOICE.pdf` context):**
-            The document lists 'IBAN:IT2710503438100000000127869' and on the next line '000000127869'[cite: 5]. The number '000000127869' is the BBAN portion of the IBAN. If the requirement is to capture a separately displayed BBAN when an IBAN is also present, this value ('000000127869') could be extracted. If a *completely distinct* non-IBAN local account number were present, that would be preferred. If only the IBAN line was present, this field would be 'null'.
-
-            **Task:** Locate and accurately extract the beneficiary's traditional (non-IBAN) bank account number.
-            """,
-        },
-        {
-            "name": "BENEFICIARY_IBAN",
+           "name": "BENEFICIARY ACCOUNT NO / IBAN",
             "description": """Extract the International Bank Account Number (IBAN) of the seller (beneficiary) where the payment should be sent. This field should ONLY capture IBANs.
 
             **Typical Location & Labels:**
@@ -1643,7 +1619,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "BENEFICIARY_BANK",
+             "name": "BENEFICIARY BANK",
             "description": """Extract the name of the bank where the seller (beneficiary) holds their account for payment.
 
             **Typical Location & Labels:**
@@ -1666,7 +1642,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "BENEFICIARY_BANK_ADDRESS",
+            "name": "BENEFICIARY BANK ADDRESS",
             "description": """Extract the full mailing address of the seller's (beneficiary's) bank.
 
             **Typical Location & Labels:**
@@ -1689,7 +1665,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "BENEFICIARY_BANK_CODE",
+            "name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE / ROUTING NO", # Spelling from user, expanded
             "description": """Extract the unique identification code for the seller's (beneficiary's) bank. This could be a SWIFT/BIC code (for international payments), ABA Routing Number (for US payments), Sort Code (UK), BSB (Australia), IFSC (India), or other relevant national bank clearing codes.
 
             **Typical Location & Labels:**
@@ -1713,7 +1689,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "TOTAL_INVOICE_AMOUNT",
+            "name": "Total Invoice Amount",
             "description": """Extract the final, definitive total monetary sum due on the invoice. This amount should be inclusive of all items, charges, and taxes (if applicable and included in the final sum), and less any deductions reflected directly in this final total.
 
             **Typical Location & Labels:**
@@ -1735,7 +1711,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "INVOICE_AMOUNT",
+            "name": "Invoice Amount", # Repeated field, ensure description helps differentiate or confirms synonymity
             "description": """Extract the primary sum of the invoice. This often refers to the main total amount and can be synonymous with 'TOTAL_INVOICE_AMOUNT' if only one definitive total is presented. If multiple totals exist (e.g., Subtotal, Total before Tax, Grand Total), this should ideally capture the most representative invoiced amount, frequently the grand total.
 
             **Typical Location & Labels:**
@@ -1757,7 +1733,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "BENEFICIARY_NAME",
+            "name": "Beneficiary Name", # Often the same as Seller Name
             "description": """Extract the name of the ultimate recipient of the funds for this invoice, who is typically the seller or exporter.
 
             **Typical Location & Labels:**
@@ -1781,7 +1757,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "BENEFICIARY_ADDRESS",
+             "name": "Beneficiary Address", # Often the same as Seller Address
             "description": """Extract the full mailing address of the beneficiary (typically the seller/exporter) to whom the payment is directed.
 
             **Typical Location & Labels:**
@@ -1804,7 +1780,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "DESCRIPTION_OF_GOODS",
+            "name": "DESCRIPTION OF GOODS",
             "description": """Extract a detailed account of all products or services being invoiced. This is usually found in the main table or line items section of the invoice and can include product names, codes, specifications, or service descriptions.
 
             **Typical Location & Labels:**
@@ -1828,7 +1804,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "QUANTITY_OF_GOODS",
+            "name": "QUANTITY OF GOODS",
             "description": """Extract the amount or number of units for each item or service listed on the invoice, including the unit of measure if specified.
 
             **Typical Location & Labels:**
@@ -1855,7 +1831,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "PAYMENT_TERMS",
+           "name": "PAYMENT TERMS",
             "description": """Extract the conditions agreed upon for payment of the invoice, such as the timeframe, percentage due, and method specifics if included in the terms.
 
             **Typical Location & Labels:**
@@ -1877,7 +1853,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "BENEFICIARY_SELLER_SIGNATURE",
+           "name": "BENEFICIARY/SELLER'S SIGNATURE",
             "description": """Identify the handwritten or digital signature of the authorized representative of the seller/beneficiary. This can also be a typed name if it clearly serves as an authorization in place of a physical signature.
 
             **Typical Location & Labels:**
@@ -1899,7 +1875,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "APPLICANT_BUYER_SIGNATURE",
+           "name": "APPLICANT/BUYER'S SIGNATURE",
             "description": """Identify the handwritten or digital signature of the authorized representative of the applicant/buyer, or a typed name if it clearly serves as an authorization or acceptance.
 
             **Typical Location & Labels:**
@@ -1921,7 +1897,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "MODE_OF_REMITTANCE",
+            "name": "MODE OF REMITTANCE",
             "description": """Extract the method by which the payment for the invoice is expected to be made.
 
             **Typical Location & Labels:**
@@ -1942,7 +1918,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "MODE_OF_TRANSIT",
+            "name": "MODE OF TRANSIT",
             "description": """Extract the method of transportation used or to be used for shipping the goods (e.g., Sea, Air, Road, Rail, Ocean).
 
             **Typical Location & Labels:**
@@ -1963,7 +1939,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "INCO_TERM",
+            "name": "INCO TERM",
             "description": """Extract the Incoterm (International Commercial Term) which specifies the responsibilities of buyers and sellers in the transaction.
 
             **Typical Location & Labels:**
@@ -1984,7 +1960,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "HS_CODE",
+            "name": "HS CODE",
             "description": """Extract the Harmonized System (HS) code or Harmonized Tariff Schedule (HTS) code for the products listed on the invoice.
 
             **Typical Location & Labels:**
@@ -2006,7 +1982,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "INTERMEDIARY_BANK_DETAILS",
+             "name": "Intermediary Bank (Field 56)", # Existing field
             "description": """Extract details of any intermediary bank (also known as a correspondent bank) if specified in the payment instructions. This bank is used to route payment from the buyer's bank to the seller's (beneficiary's) bank. Information might be referred to by 'Field 56' in SWIFT message contexts.
 
             **Typical Location & Labels:**
@@ -2027,7 +2003,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "INTERMEDIARY_BANK_NAME",
+             "name": "INTERMEDIARY BANK NAME",
             "description": """Extract the name of the intermediary bank, if one is specified in the payment instructions.
 
             **Typical Location & Labels:**
@@ -2047,7 +2023,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "INTERMEDIARY_BANK_ADDRESS",
+            "name": "INTERMEDIARY BANK ADDRESS",
             "description": """Extract the full mailing address of the intermediary bank, if one is specified.
 
             **Typical Location & Labels:**
@@ -2068,7 +2044,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "INTERMEDIARY_BANK_COUNTRY",
+             "name": "INTERMEDIARY BANK COUNTRY",
             "description": """Extract the country where the intermediary bank is located, if one is specified.
 
             **Typical Location & Labels:**
@@ -2088,7 +2064,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "PARTY_NAME_APPLICANT",
+           "name": "Party Name ( Applicant )", # Existing field
             "description": """Extract the name of the applicant, which on an invoice typically refers to the buyer, customer, or the party being billed.
 
             **Typical Location & Labels:**
@@ -2109,7 +2085,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "PARTY_NAME_BENEFICIARY",
+             "name": "Party Name ( Beneficiary )", # Existing field
             "description": """Extract the name of the party who is the beneficiary of the payment or transaction related to the invoice. This is typically the seller/exporter.
 
             **Typical Location & Labels:**
@@ -2131,7 +2107,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "PARTY_COUNTRY_BENEFICIARY",
+            "name": "Party Country ( Beneficiary )", 
             "description": """Extract the country where the beneficiary (typically the seller/exporter) is officially located or registered.
 
             **Typical Location & Labels:**
@@ -2152,7 +2128,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "PARTY_TYPE_BENEFICIARY_BANK",
+           "name": "Party Type ( Beneficiary Bank )", # Existing field
             "description": """Extract the role or classification of the beneficiary's bank (e.g., 'Beneficiary Bank', 'Depository Bank', 'Receiving Bank').
 
             **Typical Location & Labels:**
@@ -2172,7 +2148,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "PARTY_NAME_BENEFICIARY_BANK",
+            "name": "Party Name ( Beneficiary Bank )", # Existing field, space before closing parenthesis
             "description": """Extract the name of the bank that holds the account for the beneficiary (typically the seller/exporter). This is synonymous with the 'BENEFICIARY_BANK' field.
 
             **Typical Location & Labels:**
@@ -2193,7 +2169,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "PARTY_COUNTRY_BENEFICIARY_BANK",
+             "name": "Party Country ( Beneficiary Bank )", # Existing field, space before closing parenthesis
             "description": """Extract the country where the beneficiary's bank is located.
 
             **Typical Location & Labels:**
@@ -2214,7 +2190,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "DRAWEE_ADDRESS",
+             "name": "Drawee Address", # Existing field
             "description": """Extract the full name and address of the drawee, the party on whom a bill of exchange or draft (if applicable to the transaction) is drawn. On a standard invoice without mention of such instruments, the drawee is generally considered the buyer/importer who is responsible for payment.
 
             **Typical Location & Labels:**
@@ -2235,7 +2211,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "PORT_OF_LOADING",
+             "name": "PORT OF LOADING", # Existing field
             "description": """Extract the specific port, airport, or place where the goods are loaded onto the main international transport vessel, aircraft, or vehicle for export. This can also be the 'Place of Receipt' if it signifies the start of the main carriage.
 
             **Typical Location & Labels:**
@@ -2256,7 +2232,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "PORT_OF_DISCHARGE",
+            "name": "PORT OF DISCHARGE", # Existing field
             "description": """Extract the specific port, airport, or place where the goods are to be unloaded from the main international transport after arrival in the destination country. This can also be the 'Place of Final Delivery' if it signifies the end of the main carriage.
 
             **Typical Location & Labels:**
@@ -2277,7 +2253,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "VESSEL_TYPE",
+             "name": "VESSEL TYPE",
             "description": """Extract the general type of transport conveyance used or anticipated for the main leg of the journey for the goods (e.g., 'Vessel', 'Container Ship', 'Aircraft', 'Cargo Plane', 'Truck', 'Rail Car').
 
             **Typical Location & Labels:**
@@ -2298,7 +2274,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "VESSEL_NAME_VOYAGE_FLIGHT_NO",
+           "name": "VESSEL NAME", # Existing field
             "description": """Extract the specific name of the ship or vessel carrying the goods, or the flight number if transport is by air, or the voyage number if applicable.
 
             **Typical Location & Labels:**
@@ -2319,7 +2295,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "THIRD_PARTY_EXPORTER_NAME",
+            "name": "THIRD PARTY EXPORTER NAME", # Existing field
             "description": """Extract the name of a third-party exporter, if this entity is different from the primary seller listed on the invoice and is explicitly mentioned as handling export formalities or being the exporter of record.
 
             **Typical Location & Labels:**
@@ -2340,7 +2316,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "THIRD_PARTY_EXPORTER_COUNTRY",
+            "name": "THIRD PARTY EXPORTER COUNTRY", # Existing field
             "description": """Extract the country of the third-party exporter, if such a party is named on the invoice and is distinct from the primary seller.
 
             **Typical Location & Labels:**
