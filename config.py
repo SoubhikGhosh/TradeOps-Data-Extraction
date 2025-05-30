@@ -2414,7 +2414,7 @@ EXTRACTION_PROMPT_TEMPLATE = """
 **Output Requirements (Strict):**
 
 1.  **JSON Only:** You MUST return ONLY a single, valid JSON object as your response. Do NOT include any introductory text, explanations, summaries, apologies, or any other text outside of the JSON structure. The response must start directly with `{{` and end with `}}`.
-2.  **JSON Structure:** The JSON object MUST have keys corresponding EXACTLY to the field **names** provided in the "Fields to Extract" list above.
+2.  **JSON Structure:** The JSON object MUST have keys corresponding EXACTLY to the field **names** provided in the "Fields to Extract" list above. STRICTLY MAKE SURE IT IS A VALID JSON WITH NO EXTRA QUOTES, COMMAS, SPECIAL CHARACTERS ETC. AND CAN BE PARSED PROGRAMATICALLY BY A PARSER.
 3.  **Field Value Object:** Each value associated with a field key MUST be another JSON object containing the following three keys EXACTLY:
     * `"value"`: The extracted text value for the field.
         * If the field is clearly present, extract the value with absolute precision, ensuring every character is accurately represented and free of extraneous text/formatting (unless the formatting is part of the value, like a specific date format if ISO conversion is not possible).

@@ -15,3 +15,5 @@ Pillow>=9.0.0 # Dependency for pdf2image
 
 # Optional, if using PyMuPDF for PDF text/image extraction
 PyMuPDF>=1.22.0
+
+json5
