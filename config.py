@@ -34,6 +34,15 @@ SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
 }
 
+# --- Processing Configuration ---
+MAX_WORKERS = 4  # Adjust based on CPU cores and API limits for parallel processing
+TEMP_DIR = "temp_processing"
+OUTPUT_FILENAME = "extracted_data.xlsx"
+
+# --- Logging Configuration ---
+LOG_FILE = "app_log.log"
+LOG_LEVEL = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+
 # --- Document Field Definitions with Descriptions ---
 DOCUMENT_FIELDS = {
     "CRL": [
@@ -1358,7 +1367,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-             "name": "INVOICE NO",
+            "name": "INVOICE NO",
             "description": """Extract the unique alphanumeric identifier assigned to this specific invoice or proforma invoice by the seller/issuer.
 
             **Typical Location & Labels:**
@@ -1403,7 +1412,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-             "name": "BUYER ADDRESS",
+            "name": "BUYER ADDRESS",
             "description": """Extract the complete mailing address of the buyer or consignee from the provided text.
             This information is typically found under headings like 'CONSIGNEE:', 'Bill To:', 'Deliver To:', or 'Buyer:'.
 
@@ -1619,7 +1628,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-             "name": "BENEFICIARY BANK",
+            "name": "BENEFICIARY BANK",
             "description": """Extract the name of the bank where the seller (beneficiary) holds their account for payment.
 
             **Typical Location & Labels:**
@@ -1757,7 +1766,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-             "name": "Beneficiary Address", # Often the same as Seller Address
+            "name": "Beneficiary Address", 
             "description": """Extract the full mailing address of the beneficiary (typically the seller/exporter) to whom the payment is directed.
 
             **Typical Location & Labels:**
@@ -1831,7 +1840,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-           "name": "PAYMENT TERMS",
+            "name": "PAYMENT TERMS",
             "description": """Extract the conditions agreed upon for payment of the invoice, such as the timeframe, percentage due, and method specifics if included in the terms.
 
             **Typical Location & Labels:**
@@ -1853,7 +1862,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-           "name": "BENEFICIARY/SELLER'S SIGNATURE",
+            "name": "BENEFICIARY/SELLER'S SIGNATURE",
             "description": """Identify the handwritten or digital signature of the authorized representative of the seller/beneficiary. This can also be a typed name if it clearly serves as an authorization in place of a physical signature.
 
             **Typical Location & Labels:**
@@ -1875,7 +1884,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-           "name": "APPLICANT/BUYER'S SIGNATURE",
+            "name": "APPLICANT/BUYER'S SIGNATURE",
             "description": """Identify the handwritten or digital signature of the authorized representative of the applicant/buyer, or a typed name if it clearly serves as an authorization or acceptance.
 
             **Typical Location & Labels:**
@@ -1982,7 +1991,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-             "name": "Intermediary Bank (Field 56)", # Existing field
+            "name": "Intermediary Bank (Field 56)",
             "description": """Extract details of any intermediary bank (also known as a correspondent bank) if specified in the payment instructions. This bank is used to route payment from the buyer's bank to the seller's (beneficiary's) bank. Information might be referred to by 'Field 56' in SWIFT message contexts.
 
             **Typical Location & Labels:**
@@ -2003,7 +2012,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-             "name": "INTERMEDIARY BANK NAME",
+            "name": "INTERMEDIARY BANK NAME",
             "description": """Extract the name of the intermediary bank, if one is specified in the payment instructions.
 
             **Typical Location & Labels:**
@@ -2044,7 +2053,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-             "name": "INTERMEDIARY BANK COUNTRY",
+            "name": "INTERMEDIARY BANK COUNTRY",
             "description": """Extract the country where the intermediary bank is located, if one is specified.
 
             **Typical Location & Labels:**
@@ -2064,7 +2073,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-           "name": "Party Name ( Applicant )", # Existing field
+            "name": "Party Name ( Applicant )",
             "description": """Extract the name of the applicant, which on an invoice typically refers to the buyer, customer, or the party being billed.
 
             **Typical Location & Labels:**
@@ -2085,7 +2094,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-             "name": "Party Name ( Beneficiary )", # Existing field
+            "name": "Party Name ( Beneficiary )", 
             "description": """Extract the name of the party who is the beneficiary of the payment or transaction related to the invoice. This is typically the seller/exporter.
 
             **Typical Location & Labels:**
@@ -2128,7 +2137,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-           "name": "Party Type ( Beneficiary Bank )", # Existing field
+           "name": "Party Type ( Beneficiary Bank )", 
             "description": """Extract the role or classification of the beneficiary's bank (e.g., 'Beneficiary Bank', 'Depository Bank', 'Receiving Bank').
 
             **Typical Location & Labels:**
@@ -2148,7 +2157,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "Party Name ( Beneficiary Bank )", # Existing field, space before closing parenthesis
+            "name": "Party Name ( Beneficiary Bank )",
             "description": """Extract the name of the bank that holds the account for the beneficiary (typically the seller/exporter). This is synonymous with the 'BENEFICIARY_BANK' field.
 
             **Typical Location & Labels:**
@@ -2169,7 +2178,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-             "name": "Party Country ( Beneficiary Bank )", # Existing field, space before closing parenthesis
+            "name": "Party Country ( Beneficiary Bank )", 
             "description": """Extract the country where the beneficiary's bank is located.
 
             **Typical Location & Labels:**
@@ -2190,7 +2199,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-             "name": "Drawee Address", # Existing field
+            "name": "Drawee Address", 
             "description": """Extract the full name and address of the drawee, the party on whom a bill of exchange or draft (if applicable to the transaction) is drawn. On a standard invoice without mention of such instruments, the drawee is generally considered the buyer/importer who is responsible for payment.
 
             **Typical Location & Labels:**
@@ -2211,7 +2220,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-             "name": "PORT OF LOADING", # Existing field
+            "name": "PORT OF LOADING",
             "description": """Extract the specific port, airport, or place where the goods are loaded onto the main international transport vessel, aircraft, or vehicle for export. This can also be the 'Place of Receipt' if it signifies the start of the main carriage.
 
             **Typical Location & Labels:**
@@ -2232,7 +2241,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "PORT OF DISCHARGE", # Existing field
+            "name": "PORT OF DISCHARGE", 
             "description": """Extract the specific port, airport, or place where the goods are to be unloaded from the main international transport after arrival in the destination country. This can also be the 'Place of Final Delivery' if it signifies the end of the main carriage.
 
             **Typical Location & Labels:**
@@ -2253,7 +2262,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-             "name": "VESSEL TYPE",
+            "name": "VESSEL TYPE",
             "description": """Extract the general type of transport conveyance used or anticipated for the main leg of the journey for the goods (e.g., 'Vessel', 'Container Ship', 'Aircraft', 'Cargo Plane', 'Truck', 'Rail Car').
 
             **Typical Location & Labels:**
@@ -2274,7 +2283,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-           "name": "VESSEL NAME", # Existing field
+            "name": "VESSEL NAME", 
             "description": """Extract the specific name of the ship or vessel carrying the goods, or the flight number if transport is by air, or the voyage number if applicable.
 
             **Typical Location & Labels:**
@@ -2295,7 +2304,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "THIRD PARTY EXPORTER NAME", # Existing field
+            "name": "THIRD PARTY EXPORTER NAME",
             "description": """Extract the name of a third-party exporter, if this entity is different from the primary seller listed on the invoice and is explicitly mentioned as handling export formalities or being the exporter of record.
 
             **Typical Location & Labels:**
@@ -2316,7 +2325,7 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "THIRD PARTY EXPORTER COUNTRY", # Existing field
+            "name": "THIRD PARTY EXPORTER COUNTRY", 
             "description": """Extract the country of the third-party exporter, if such a party is named on the invoice and is distinct from the primary seller.
 
             **Typical Location & Labels:**
@@ -2334,19 +2343,10 @@ DOCUMENT_FIELDS = {
             As no third-party exporter is mentioned in the `INVOICE.pdf`, their country cannot be extracted. Therefore, the output for this field would be 'null'.
 
             **Task:** Identify and extract the country of the third-party exporter, if specified. If not applicable, indicate 'null'.
-            """,
-        },
-    ],
+            """
+        }
+    ]
 }
-
-# --- Processing Configuration ---
-MAX_WORKERS = 4  # Adjust based on CPU cores and API limits for parallel processing
-TEMP_DIR = "temp_processing"
-OUTPUT_FILENAME = "extracted_data.xlsx"
-
-# --- Logging Configuration ---
-LOG_FILE = "app_log.log"
-LOG_LEVEL = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 # --- NEW: Classification Prompt Template ---
 CLASSIFICATION_PROMPT_TEMPLATE = """
