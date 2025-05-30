@@ -4,6 +4,7 @@ import tempfile
 import concurrent.futures
 import re
 import json
+import json5
 import random  # Added for jitter in retry mechanism
 import time    # Added for sleep in retry mechanism
 import traceback  # Added for error tracing in retry mechanism
@@ -151,47 +152,86 @@ def _prepare_document_parts(document_files: List[Dict]) -> Tuple[List[Part], Lis
             return None, file_paths_for_log # Return None for parts on error
     return parts, file_paths_for_log
 
-def _parse_vertex_json_response(response: Any, context: str) -> Dict | None:
-    """Parses JSON response from Vertex AI, handling potential errors."""
+def _parse_vertex_json_response(response: Any, context: str) -> Dict: # Changed Dict | None to Dict
+    """
+    Parses JSON-like response from Vertex AI, handling potential errors and
+    allowing for more lenient JSON5 syntax (e.g., trailing commas, comments).
+
+    Returns a dictionary, which either contains the parsed data or error information.
+    """
+    processed_text: str = "" # Ensure it's defined for all paths in except blocks
+
     try:
-        # Handle cases where response might be blocked or have unexpected structure
-        if not hasattr(response, 'text') or not response.text:
-             if response.candidates and not response.candidates[0].content.parts:
-                 block_reason = response.candidates[0].finish_reason
-                 safety_ratings = response.candidates[0].safety_ratings
-                 log.error(f"Content likely blocked for {context}. Reason: {block_reason}, Ratings: {safety_ratings}")
-                 return {"error": f"Content Blocked: {block_reason}", "safety_ratings": str(safety_ratings)} # Make ratings serializable
-             else:
-                 log.error(f"Received empty or invalid response object for {context}. Response: {response}")
-                 return {"error": "Empty or invalid response object"}
+        # 1. Handle cases where response might be blocked or have unexpected structure
+        if not hasattr(response, 'text') or not response.text: # response.text can be None or empty string
+            # Check for Vertex AI's specific blocked content structure
+            if (hasattr(response, 'candidates') and response.candidates and
+                    hasattr(response.candidates[0], 'content') and
+                    # Check if content.parts is empty or None
+                    (response.candidates[0].content.parts is None or not response.candidates[0].content.parts) and
+                    hasattr(response.candidates[0], 'finish_reason')):
+                block_reason = response.candidates[0].finish_reason
+                safety_ratings_val = response.candidates[0].safety_ratings if hasattr(response.candidates[0], 'safety_ratings') else "N/A"
+                log.error(f"Content likely blocked for {context}. Reason: {block_reason}, Ratings: {safety_ratings_val}")
+                return {"error": f"Content Blocked: {block_reason}", "safety_ratings": str(safety_ratings_val)}
+            else:
+                log.error(f"Received empty or invalid response object for {context}. Response: {response}")
+                return {"error": "Empty or invalid response object"}
 
-        # Strip potential markdown code fences ```json ... ``` if model adds them
-        raw_json = response.text.strip()
-        if raw_json.startswith("```json"):
-             raw_json = raw_json[7:-3].strip() # Remove ```json and ```
-        elif raw_json.startswith("```"): # Less common, just ```
-            raw_json = raw_json[3:-3].strip()
+        raw_text = response.text.strip()
 
-        # Validate start and end characters for safety
-        if not (raw_json.startswith('{') and raw_json.endswith('}')):
-             log.error(f"Response for {context} is not valid JSON structure. Raw Text:\n{raw_json}")
-             return {"error": "Invalid JSON structure", "raw_response": raw_json}
+        # 2. Strip potential markdown code fences
+        if raw_text.startswith("```json"):
+            processed_text = raw_text[7:-3].strip()
+        elif raw_text.startswith("```"): # Less common, just ```
+            processed_text = raw_text[3:-3].strip()
+        else:
+            processed_text = raw_text
+        
+        # If after stripping, processed_text is empty, it's an issue.
+        if not processed_text:
+            log.error(f"Response text became empty after stripping markdown for {context}. Original raw text: {raw_text}")
+            return {"error": "Empty content after stripping markdown", "raw_response": raw_text}
+
+        # 3. Basic validation for object-like structure (optional, json5 will validate syntax)
+        # This function expects to return a Dict. If the LLM might return a JSON array or other valid JSON types
+        # that are not objects, this check needs adjustment or removal.
+        if not (processed_text.startswith('{') and processed_text.endswith('}')):
+            log.warning(
+                f"Response for {context} does not strictly start/end with '{{}}'. "
+                f"Attempting to parse with json5 anyway. Processed Text:\n{processed_text}"
+            )
+            # You could return an error here if a JSON object is strictly required:
+            # return {"error": "Invalid JSON object structure (not {{}})", "raw_response": processed_text}
 
 
-        parsed_data = json.loads(raw_json)
-        log.debug(f"Successfully parsed JSON response for {context}")
+        # 4. Parse using json5.loads()
+        # This is more lenient and handles trailing commas, comments, etc.
+        parsed_data = json5.loads(processed_text)
+
+        # 5. Ensure the parsed data is a dictionary (if strictly required by the function's contract)
+        if not isinstance(parsed_data, dict):
+            log.error(f"Parsed data for {context} is not a dictionary. Type: {type(parsed_data)}. Data: {str(parsed_data)[:200]}...") # Log snippet
+            return {"error": "Parsed JSON is not a dictionary", "type": str(type(parsed_data)), "raw_response": processed_text}
+
+        log.debug(f"Successfully parsed JSON5 response as dictionary for {context}")
         return parsed_data
 
-    except json.JSONDecodeError as json_err:
-        log.error(f"Failed to decode JSON response from Vertex AI for {context}. Error: {json_err}")
-        log.error(f"Raw Vertex AI Response Text:\n{response.text}")
-        return {"error": "JSON Decode Error", "raw_response": response.text}
+    except ValueError as val_err: # json5.loads raises ValueError for parsing/syntax errors
+        log.error(f"Failed to decode JSON5 response from Vertex AI for {context}. Error: {val_err}")
+        # Log the text that was actually attempted to be parsed
+        log.error(f"Processed Text that failed parsing for {context}:\n{processed_text}")
+        return {"error": "JSON5 Decode Error", "details": str(val_err), "raw_response": processed_text}
     except AttributeError as attr_err:
-         log.error(f"Attribute error parsing response for {context}. Error: {attr_err}. Response: {response}")
-         return {"error": f"AttributeError parsing response: {attr_err}"}
+        # This error suggests 'response' object didn't have expected attributes (e.g. 'text', 'candidates')
+        log.error(f"Attribute error accessing response data for {context}. Error: {attr_err}. Response type: {type(response)}")
+        return {"error": f"AttributeError accessing response data: {attr_err}"}
     except Exception as e:
+        # Catch-all for any other unexpected errors during parsing
         log.exception(f"Unexpected error parsing Vertex AI response for {context}. Error: {e}")
-        return {"error": f"Unexpected Parsing Error: {e}"}
+        # Log the text that was being processed if available
+        current_text_to_log = processed_text if processed_text else (response.text if hasattr(response, 'text') else str(response))
+        return {"error": f"Unexpected Parsing Error: {str(e)}", "raw_response": current_text_to_log}
 
 # --- Stage 1: Grouping by Base Filename ---
 def _group_files_by_base_name(folder_path: Path) -> Dict[str, List[Dict]]:
