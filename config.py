@@ -287,33 +287,39 @@ DOCUMENT_FIELDS = {
         {
             "name": "BENEFICIARY ACCOUNT NO / IBAN",
             "description": """
-    **You are an expert data extraction system. Your task is to extract the Beneficiary's Bank Account Number or IBAN from the document.**
+            **You are an expert data extraction system. Your task is to extract the Beneficiary's Bank Account Number or IBAN from the document.**
 
-    **Objective:** Accurately locate and extract the beneficiary's bank account number or International Bank Account Number (IBAN) where the funds are to be credited.
+            **Objective:** Accurately locate and extract the specific bank account number or International Bank Account Number (IBAN) designated for the beneficiary, where funds are to be credited.
 
-    **Guidance for Extraction:**
-    1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'Account No.:', 'A/C No.:', 'Account Number:', 'Beneficiary Account No.:', 'IBAN:', 'Beneficiary IBAN:', 'Acc No:', 'A/c ID:'.
-        * **Location:** This information is typically found within the 'Beneficiary Details' or 'Beneficiary Bank Details' section, often close to the beneficiary's name and bank name.
-        * **Format:**
-            * **Account Numbers** vary widely in format (can be numeric, alphanumeric, may contain hyphens or spaces).
-            * **IBANs** have a specific structure: they start with a two-letter country code, followed by two check digits, and then a country-specific Basic Bank Account Number (BBAN) which can be up to 30 alphanumeric characters (e.g., DE89370400440532013000, GB29NWBK60161331926819).
-    2.  **What to Extract:**
-        * Extract the **complete and exact account number or IBAN** as it appears.
-        * Include all alphanumeric characters and any embedded hyphens or spaces if they are part of the presented number (though it's common to normalize by removing spaces/hyphens later). For extraction, capture as presented.
-        * If both an IBAN and a local account number are present for the beneficiary, prioritize the IBAN.
+            **Guidance for Extraction:**
+            1.  **Primary Focus - Beneficiary Context:**
+                * Concentrate on sections explicitly labeled for 'Beneficiary', 'Beneficiary Bank Details', 'Payment To', 'Remit To', or similar terms indicating the recipient of funds.
+                * **Crucially, distinguish** this from any account details provided for the payer, sender, buyer, or ordering customer. Do NOT extract account numbers belonging to these parties.
 
-    **Examples of Account No / IBAN text:**
-    * "IBAN: DE89370400440532013000"
-    * "Account No.: 001-234567-890"
-    * "A/C No: 218246110956"
-    * "Beneficiary Account Number: FR7630006000011234567890189"
+            2.  **Identification Cues:**
+                * **Labels:** Look for labels directly associated with the beneficiary's account, such as 'Account No.:', 'A/C No.:', 'Account Number:', 'Beneficiary Account No.:', 'IBAN:', 'Beneficiary IBAN:', 'Acc No:', 'A/c ID:', 'Payee Account:', 'Recipient Account No:'.
+                * **Location:** This information is typically found within the clearly demarcated 'Beneficiary Details' or 'Beneficiary Bank Details' section, often in proximity to the beneficiary's name and bank name.
+                * **Format:**
+                    * **Account Numbers:** Vary widely (can be numeric, alphanumeric, may contain hyphens or spaces).
+                    * **IBANs:** Have a standard structure: a two-letter country code, two check digits, and then a country-specific Basic Bank Account Number (BBAN) which can be up to 30 alphanumeric characters (e.g., DE89370400440532013000, GB29NWBK60161331926819).
 
-    **Output Requirements:**
-    * **Format:** Return the extracted account number or IBAN as a **string**.
-    * **If Not Found:** If the Beneficiary Account No / IBAN cannot be clearly identified, return **null**.
-    * **Normalization Note:** While extracting as presented, downstream processes might normalize by removing spaces and hyphens.
-    """,
+            3.  **What to Extract:**
+                * Extract the **complete and exact account number or IBAN** as it appears visually.
+                * Include all alphanumeric characters and any embedded hyphens or spaces if they are part of the presented number. (Normalization by removing spaces/hyphens can be a separate, subsequent step if required).
+                * If both an IBAN and a local account number are clearly present *for the same beneficiary*, prioritize extracting the **IBAN**.
+
+            **Examples of Account No / IBAN text:**
+            * "IBAN: DE89370400440532013000"
+            * "Account No.: 001-234567-890"
+            * "A/C No: 218246110956"
+            * "Beneficiary Account Number: FR7630006000011234567890189"
+            * "Payee Account: SG9000123456789012"
+
+            **Output Requirements:**
+            * **Format:** Return the extracted account number or IBAN as a single **string**.
+            * **If Not Found:** If the Beneficiary Account No / IBAN cannot be clearly and confidently identified according to the guidelines above, or if the relevant section is missing from the document, return **null**.
+            * **Ambiguity:** If multiple distinct numbers could fit the beneficiary account description in a confusing manner, and a single definitive one cannot be chosen, it is preferable to return **null** rather than a guess to maintain data accuracy.
+            """,
         },
         {
             "name": "BENEFICIARY BANK",
@@ -996,27 +1002,37 @@ DOCUMENT_FIELDS = {
         {
             "name": "INVOICE NO",
             "description": """
-    **You are an expert data extraction system. Your task is to extract the Invoice Number referenced in the Customer Request Letter (CRL).**
+        **You are an expert data extraction system. Your primary task is to extract the Invoice Number specifically referenced within the body of a Customer Request Letter (CRL).**
 
-    **Objective:** Accurately locate and extract the unique identification number of the Proforma Invoice or Commercial Invoice that this remittance request pertains to. This information is extracted *from the CRL itself* where it makes reference to an invoice.
+        **Objective:** Accurately locate and extract the unique identification number of the Proforma Invoice or Commercial Invoice to which the remittance request (detailed in the CRL) pertains. This information must be explicitly stated or directly referenced *within the text of the CRL itself*.
 
-    **Guidance for Extraction:**
-    1.  **Identification Cues:**
-        * **Labels within CRL:** Look for labels such as 'Invoice No.:', 'Ref. Invoice:', 'Against Invoice No.:', 'Proforma Invoice No.:', 'PI No.:', 'Commercial Invoice No.:'.
-        * **Location:** This reference is typically found in sections detailing the purpose of payment, goods description, or in a specific area for invoice details within the CRL.
-        * **Context:** The invoice number is usually alphanumeric and can contain hyphens, slashes, or other characters. It's an identifier issued by the beneficiary/exporter on their invoice.
-    2.  **What to Extract:**
-        * Extract the **complete and exact invoice number** as referenced in the CRL.
+        **Guidance for Extraction:**
+        1.  **Source Focus:**
+            * The invoice number must be found *within the content of the Customer Request Letter*. Do not infer it from other documents or assume it based on file names or references to attachments not directly quoted in the CRL text.
 
-    **Examples of Invoice No. text found in a CRL:**
-    * "Invoice No.: PI-2024-001" (Extract "PI-2024-001")
-    * "Ref. Invoice: EXPORTINV/789/ABC" (Extract "EXPORTINV/789/ABC")
-    * "Against Proforma Invoice KET-20231222" (Extract "KET-20231222")
+        2.  **Identification Cues within the CRL:**
+            * **Labels:** Look for explicit labels such as 'Invoice No.:', 'Ref. Invoice:', 'Against Invoice No.:', 'Proforma Invoice No.:', 'PI No.:', 'Commercial Invoice No.:', 'Invoice Ref.:', 'Our Invoice:', 'Your Invoice:'.
+            * **Contextual Phrases:** The invoice number might also follow phrases like "payment for invoice...", "remittance against...", "related to invoice...", "as per PI...".
+            * **Location:** This reference is typically found in sections detailing the purpose of the payment, description of goods/services, or in specific fields/boxes designated for invoice details within the CRL. Pay particular attention to:
+                * Boxes or sections with headers like "special ref no to be mentioned in swift" (the invoice number may be this special reference number or listed within this box).
+                * Sections titled or related to "Shipment details & Proforma Invoice details mandatory for advance import " or similar phrasing indicating invoice information.
+            * **Format (on document):** The invoice number as it appears on the document is commonly alphanumeric and can include characters like hyphens (-), slashes (/), periods (.), and spaces. It is an identifier issued by the beneficiary/exporter on their invoice.
 
-    **Output Requirements:**
-    * **Format:** Return the extracted invoice number as a **string**.
-    * **If Not Found:** If no invoice number is referenced in the CRL, return **null**.
-    """,
+        3.  **What to Extract:**
+            * Extract the **complete and exact invoice number** precisely as it is referenced in the CRL. (The removal of hyphens is handled in the output formatting stage).
+
+        **Examples of Invoice No. text found *within a CRL* (showing final extracted output):**
+        * "Please process payment for Invoice No.: PI-2024-001" (Extract "PI2024001")
+        * "Our remittance is for Ref. Invoice: EXPORTINV/789/ABC" (Extract "EXPORTINV/789/ABC")
+        * "Funds transfer against Proforma Invoice KET-20231222 for machinery." (Extract "KET20231222")
+        * "...as detailed in PI #INV00567/B..." (Extract "INV00567/B")
+
+        **Output Requirements:**
+        * **Format:** Return the extracted invoice number as a single **string**. Any hyphens (-) present in the identified invoice number should be removed from the final returned string. Other special characters (e.g., slashes (/), periods (.)) should be preserved as they appear in the source text.
+        * **Multiple References Consideration:** If the CRL could explicitly list multiple distinct invoice numbers for a single remittance item and the requirement is to extract only one, prioritize the first one clearly labeled or referenced. If all distinct invoice numbers pertaining to the request need to be captured, this prompt might need adjustment for list output. (Current prompt targets a single, primary reference).
+        * **If Not Found:** If no invoice number is explicitly referenced in the CRL text itself, return **null**.
+        * **Avoid Inference:** If an invoice is mentioned merely as an attachment (e.g., "see attached invoice") but its number is not quoted or directly referenced in the CRL's text, this should also result in **null** for this field.
+        """
         },
         {
             "name": "INVOICE DATE",
