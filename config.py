@@ -111,33 +111,28 @@ DOCUMENT_FIELDS = {
         {
             "name": "CUSTOMER REQUEST LETTER DATE",
             "description": """
-    **You are an expert data extraction system. Your task is to extract the Customer Request Letter Date from the document.**
+            **You are an expert data extraction system. Your task is to extract the Customer Request Letter Date from the document.**
 
-    **Objective:** Accurately locate and extract the specific date on which the customer (also referred to as the applicant) formally prepared and dated their request letter or application form. This is considered the authorship date of the letter by the customer.
+            **Objective:** Accurately locate and extract the specific date on which the customer (also referred to as the applicant) formally prepared and dated their request letter or application form. This is considered the authorship date of the letter by the customer.
 
-    **Guidance for Extraction:**
-    1.  **Identification Cues:**
-        * **Labels:** Look for explicit labels such as 'Date:', 'Dated:', 'Letter Date:'.
-        * **Location:** This date is typically found in the header section of the letter, often near the applicant's details (name, address) or below the sender's address and before the recipient's address or salutation. It can also be near the signature block if not in the header.
-        * **Context:** It is the primary date associated with the creation of the letter by the customer/applicant, not necessarily dates mentioned within the body of the letter referring to other events (e.g., invoice dates, shipment dates, unless this letter *is* the invoice).
-    2.  **Data Format:**
-        * The date can appear in various formats (e.g., "DD-MM-YYYY", "MM-DD-YYYY", "YYYY-MM-DD", "DD MON YYYY", "Month D, YYYY", "DD/MM/YY", "MM.DD.YY").
-    3.  **What to Extract:**
-        * Extract the complete date.
-        * If the date includes a textual month name (e.g., "October"), ensure it's captured correctly.
+            **Guidance for Extraction:**
+            1.  **Primary Identification Rule:** The Customer Request Letter Date will ALWAYS be read from the **top right section of the first page** of the document.
+            2.  **Labels:** It is typically preceded by a label such as **'Date:'** or **'Dated:'**.
+            3.  **Location Context:** This date is usually found near the main heading or title of the customer request letter (e.g., "REQUEST LETTER FOR IMPORT PAYMENT").
+            4.  **Uniqueness:** Critically distinguish this date from any other dates mentioned in the document, such as invoice dates, shipment dates, date of receipt stamps, or dates within the body of the letter referring to other events. The target is the primary authorship date of the request letter itself.
+            5.  **Data Format:** The date can appear in various formats (e.g., "DD-MM-YYYY", "MM-DD-YYYY", "YYYY-MM-DD", "DD MON YYYY", "Month D, YYYY", "DD/MM/YY", "MM.DD.YY").
+            6.  **What to Extract:**
+                * Extract the complete date.
+                * If the date includes a textual month name (e.g., "October"), ensure it's captured correctly.
 
-    **Examples of potential text segments containing the date:**
-    * "Date: 03-10-2023"
-    * "Dated: October 3, 2023"
-    * "2023-10-03"
-    * "03 OCT 2023"
-    * "22/12/2023"
+            **Examples of potential text segments containing the date (look for these in the specified location):**
+            * "Date: 03-10-2023"
+            * "Dated: October 3, 2023"
 
-    **Output Requirements:**
-    * **Format:** Standardize and return the extracted date in **DD-MM-YYYY** format. For example, if "October 3, 2023" is found, output "03-10-2023". If "2023/10/03" is found, output "03-10-2023". If "22/12/23" is found, output "22-12-2023".
-    * **If Not Found:** If the Customer Request Letter Date cannot be clearly identified or is absent from the document, return **null**.
-    * **Clarification:** Distinguish this from other dates like 'Date of Receipt' or 'Invoice Date' unless the document structure clearly indicates this is the primary letter date.
-    """,
+            **Output Requirements:**
+            * **Format:** Standardize and return the extracted date in **DD-MM-YYYY** format. For example, if "October 3, 2023" is found, output "03-10-2023". If "2023/10/03" is found, output "03-10-2023". If "03/10/23" is found, output "03-10-2023".
+            * **If Not Found:** If the Customer Request Letter Date cannot be clearly identified in the specified location using the given cues, return **null**.
+            """
         },
         {
             "name": "BENEFICIARY NAME",
@@ -324,33 +319,34 @@ DOCUMENT_FIELDS = {
         {
             "name": "BENEFICIARY BANK",
             "description": """
-    **You are an expert data extraction system. Your task is to extract the Beneficiary Bank Name from the document.**
+            **You are an expert data extraction system. Your task is to extract the Beneficiary Bank Name from the document.**
 
-    **Objective:** Accurately locate and extract the full official name of the bank where the beneficiary holds their account.
+            **Objective:** Accurately locate and extract the full official name of the bank where the beneficiary holds their account, ensuring *only the bank name* is captured.
 
-    **Guidance for Extraction:**
-    1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'Beneficiary Bank:', 'Bank Name:', 'Beneficiary's Bank:', 'Receiving Bank:', 'Payee Bank:'.
-        * **Location:** Usually listed in the 'Beneficiary Bank Details' section, typically near the beneficiary's account number and the bank's SWIFT code or address.
-        * **Content:** This is the name of a financial institution.
-    2.  **What to Extract:**
-        * Extract the **full and official name** of the bank.
-        * Include any suffixes like 'Ltd.', 'PLC', 'Inc.', 'N.A.', 'AG'.
-        * Be mindful of common bank name components (e.g., "Bank of ...", "... Commercial Bank", "First National ...").
-    3.  **Handling Variations:**
-        * Bank names can be long. Ensure the full name is captured.
-        * The document might use slight variations or abbreviations; try to capture the most complete official name presented. The term "Beneficiary Bank" is standard, but documents might have typos like "Beneficary Bank"; your search should be robust to minor variations if context is clear.
+            **Guidance for Extraction:**
+            1.  **Identification Cues:**
+                * **Labels:** Look for labels such as 'Beneficiary Bank:', 'Bank Name:', 'Beneficiary's Bank:', 'Receiving Bank:', 'Payee Bank:'.
+                * **Location:** Usually listed in the 'Beneficiary Bank Details' section, typically near the beneficiary's account number and the bank's SWIFT code or address.
+                * **Content:** This is the name of a financial institution.
+            2.  **What to Extract:**
+                * Extract the **full and official name of the bank**.
+                * Include any standard suffixes like 'Ltd.', 'PLC', 'Inc.', 'N.A.', 'AG', 'S.A.', 'S.A.U.'.
+                * **Crucially, exclude any branch name, branch address, city, or other location details that might appear on the same line or immediately after the bank's name unless they are an integral part of the bank's official name.** For example, if "Global Bank - Main Street Branch" is found, extract "Global Bank". If "CITY BANK N.A." is found, extract "CITY BANK N.A.". If "Banco Sabadell:" is listed, extract "Banco Sabadell".
+            3.  **Handling Variations:**
+                * Bank names can be long. Ensure the full official name is captured, but only the name.
+                * The document might use slight variations or abbreviations; try to capture the most complete official name presented.
 
-    **Examples of Beneficiary Bank text:**
-    * "Beneficiary Bank: Global Standard Commercial Bank"
-    * "Bank Name: Exporter's First Union Bank PLC"
-    * "BANK OF CHINA LINQU SUB BRANCH"
+            **Examples of Beneficiary Bank text:**
+            * "Beneficiary Bank: Global Standard Commercial Bank" (Extract "Global Standard Commercial Bank")
+            * "Bank Name: Exporter's First Union Bank PLC, London Branch" (Extract "Exporter's First Union Bank PLC")
+            * "BANK OF CHINA LINQU SUB BRANCH" (If "LINQU SUB BRANCH" is part of the official unique name, include it. If it's just a branch designator separate from the core bank name "BANK OF CHINA", extract "BANK OF CHINA". This requires careful judgment based on common bank naming conventions – prioritize the main institutional name.) In the provided PDF example, "Banco Sabadell:" is a clear case; extract "Banco Sabadell".
+            * "Beneficiary Bank name, address& Wire details Banco Sabadell: ES1300815181000001071017 SWIFT: BSABESBBXXX" -> Extract "Banco Sabadell"
 
-    **Output Requirements:**
-    * **Format:** Return the extracted bank name as a **string**.
-    * **If Not Found:** If the Beneficiary Bank name cannot be clearly identified, return **null**.
-    """,
-        },
+            **Output Requirements:**
+            * **Format:** Return the extracted bank name as a **string**.
+            * **If Not Found:** If the Beneficiary Bank name cannot be clearly identified, return **null**.
+            """
+    },
         {
             "name": "BENEFICIARY BANK ADDRESS",
             "description": """
@@ -387,32 +383,34 @@ DOCUMENT_FIELDS = {
 
     **Guidance for Extraction:**
     1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'SWIFT Code:', 'BIC Code:', 'SWIFT/BIC:', 'Beneficiary Bank SWIFT:', 'Bank Code:', 'IFSC:', 'IFSC Code:', 'Sort Code:', 'BSB Number:', 'Routing No:', 'ABA:', 'Fedwire:', 'Chips UID:'. These labels are typically found near the beneficiary bank's name and address.
-        * **Format:**
-            * **SWIFT/BIC codes** are typically 8 or 11 characters long, alphanumeric (e.g., BANKGB2LXXX, DEUTDEFF).
+        * **Labels:** Look for explicit labels such as **'SWIFT Code:'**, **'SWIFT:'**, 'BIC Code:', 'SWIFT/BIC:', 'Beneficiary Bank SWIFT:', 'Bank Code:', 'IFSC:', 'IFSC Code:', 'Sort Code:', 'BSB Number:', 'Routing No:', 'ABA:'. These labels are typically found near the beneficiary bank's name and address.
+        * **Format Adherence (Crucial for SWIFT):**
+            * **SWIFT/BIC codes** are 8 or 11 characters long, alphanumeric (e.g., BANKGB2LXXX, DEUTDEFF, BSABESBBXXX). This is the primary target if available.
             * **IFSC codes** (Indian Financial System Code) are 11 characters, alphanumeric, with the fifth character usually being '0' (e.g., HDFC0000123).
             * **Sort Codes** (UK & Ireland) are typically 6 digits, often formatted as XX-XX-XX (e.g., 12-34-56).
             * **BSB Numbers** (Australia) are 6 digits, often formatted as XXX-XXX (e.g., 012-345).
             * **Routing Numbers/ABA Numbers** (USA) are 9 digits.
         * **Context:** This information is usually located in the 'Beneficiary Bank Details' section, alongside the beneficiary bank's name and account number.
     2.  **What to Extract:**
-        * Extract the **complete and exact code** as it appears.
-        * If multiple types of codes are present for the beneficiary bank (e.g., both a SWIFT code and a local clearing code), prioritize the SWIFT/BIC code if available. If not, extract the available code. If the specific type of code is ambiguous but clearly a bank identifier, extract it.
-        * Remove any prefixes or descriptive text that are not part of the code itself (e.g., if "SWIFT Code: BANKGB2LXXX" is found, extract "BANKGB2LXXX").
+        * Extract the **complete and exact code** as it appears, associated with its label.
+        * **Prioritize SWIFT/BIC Code:** If multiple types of codes are present for the beneficiary bank (e.g., both a SWIFT code and a local clearing code), give preference to and extract the **SWIFT/BIC code if it is explicitly labeled 'SWIFT' or 'SWIFT Code:' and matches the standard SWIFT/BIC format.**
+        * If a SWIFT/BIC code is not available or not clearly identifiable, extract any other available bank identifier (IFSC, Sort Code, BSB, ABA) that is clearly labeled and matches its respective standard format.
+        * Remove any prefixes or descriptive text that are not part of the code itself (e.g., if "SWIFT Code: BSABESBBXXX" is found, extract "BSABESBBXXX").
+    3.  **Handling Unclear Text (for SWIFT/BIC primarily):**
+        * The code, especially a SWIFT code, needs to be read perfectly.
+        * If the text is partially unclear but a candidate string closely matching the standard format of a SWIFT/BIC code (8 or 11 alphanumeric characters) is discernible *directly associated with a 'SWIFT' or 'SWIFT Code:' label*, extract the visible/discernible characters.
+        * Do not invent or guess characters for wholly illegible parts. Extract what can be reasonably inferred from visible evidence and adherence to the standard format. If significant ambiguity remains due to poor legibility, this should be noted if a confidence score mechanism is available, otherwise extract the best possible interpretation of visible characters.
 
     **Examples of codes:**
-    * SWIFT/BIC: "BANKGB2LXXX", "DEUTDEFFXXX", "BKCHCNBJ500"
-    * IFSC: "BKID0001234"
-    * Sort Code: "20-30-40"
-    * BSB: "062-000"
-    * Routing No: "123456789"
+    * Label "SWIFT:": "BSABESBBXXX" (Extract "BSABESBBXXX")
+    * Label "SWIFT Code:": "DEUTDEFFXXX" (Extract "DEUTDEFFXXX")
+    * Label "IFSC:": "BKID0001234" (Extract "BKID0001234", if SWIFT not found)
 
     **Output Requirements:**
     * **Format:** Return the extracted code as a **single string**.
-    * **If Not Found:** If no such bank identification code for the beneficiary bank can be found, return **null**.
-    * **Preference:** If both a SWIFT/BIC and another local code (IFSC, Sort Code, BSB, ABA) are clearly listed for the beneficiary bank, and no other instruction specifies which to take, prefer the SWIFT/BIC. If only one type is present, extract that.
-    """,
-        },
+    * **If Not Found:** If no such bank identification code for the beneficiary bank that matches the criteria (labeled, correct format) can be found, return **null**.
+    """
+    },
         {
             "name": "STANDARD DECLARATIONS AS PER PRODUCTS",
             "description": """
@@ -659,29 +657,36 @@ DOCUMENT_FIELDS = {
         {
             "name": "FEE ACCOUNT NO",
             "description": """
-    **You are an expert data extraction system. Your task is to extract the Applicant's Fee Account Number from the document, if specified as different from the main debit account.**
+            **You are an expert data extraction system. Your task is to extract the Applicant's Fee Account Number from the document, specifically for HDFC Bank Ltd. charges, if applicable.**
 
-    **Objective:** Accurately locate and extract the applicant's bank account number from which transaction fees or charges will be debited, IF this account is explicitly stated as being separate from the 'DEBIT ACCOUNT NO' used for the principal remittance amount.
+            **Objective:** Accurately locate and extract the applicant's bank account number from which HDFC Bank Ltd.'s own charges for the transaction will be debited.
 
-    **Guidance for Extraction:**
-    1.  **Identification Cues:**
-        * **Labels:** Look for labels specifically indicating an account for charges, such as 'Fee Account No.:', 'Charges Account:', 'Account for Charges:', 'Debit Charges from A/c:'.
-        * **Location:** Often found near the main debit account information or in a section discussing bank charges.
-        * **Context:** The key is that this account is *specifically designated for fees* and is potentially different from the account debited for the remittance amount.
-    2.  **What to Extract:**
-        * Extract the **complete and exact account number** if a separate account for fees is explicitly mentioned.
-        * If the document indicates fees are to be debited from the same account as the principal, or if no separate fee account is mentioned, this field should reflect that (e.g., by being null or by instruction).
-        * Example context: "Account to be debited for charges of HDFC Bank Ltd. on us a/c no 50200040555100". Here, 50200040555100 is the fee account.
+            **Guidance for Extraction:**
+            1.  **Primary Location:** This information is typically found in a tabular section on the **first page**, often under or near the applicant's primary debit account details. Specifically, look for a line item related to how the bank's (e.g., HDFC Bank Ltd.) charges are handled.
+            2.  **Key Label:** Identify the row or section labeled similar to **"Account to be debited for charges of HDFC Bank Ltd."** or "Charges of HDFC Bank Ltd.".
+            3.  **Determining the Account:**
+                * **Option 1 (Primary Target):** Within this "charges" section, look for an option like **"on us"** (or "Applicant," "Self," "Our Account"). Check if this option is selected (e.g., by a tick, mark, "X", or wording like "Won us").
+                    * If "on us" is selected AND an account number is **explicitly provided directly alongside or immediately following this "on us" option** (e.g., "on us a/c no: XXXXXXXXXX"), extract that account number. This is the preferred Fee Account Number.
+                * **Option 2 (Beneficiary Pays):** If an option like **"on beneficiary"** or "Net off i.e. On beneficiary" is selected for HDFC Bank Ltd.'s charges, it means the applicant is not bearing these charges from their account. In this case, return **null**.
+                * **Option 3 (Fallback to Main Debit Account / Ambiguity):**
+                    * If "on us" is selected but **no specific account number is provided next to it**, OR
+                    * If **neither "on us" nor "on beneficiary" is clearly selected** for HDFC Bank Ltd. charges (and it's assumed the applicant bears them by default),
+                    * Then, as a fallback, use the account number specified as the main **"DEBIT ACCOUNT NO"** (the account from which the principal remittance amount is debited). You will need to refer to the value extracted for the "DEBIT ACCOUNT NO" field.
+            4.  **What to Extract:**
+                * Extract the **complete and exact account number** based on the logic above.
+                * Remove any prefixes like "a/c no:", "INR A/C No:", etc., to get the raw account number.
 
-    **Examples of Fee Account No text (when different):**
-    * "Fee Account No.: 987654321000"
-    * "Charges to be debited from A/C: 112233445566"
+            **Examples based on typical layouts:**
+            * Given: "Account to be debited for charges of HDFC Bank Ltd. [X] on us a/c no: 123456789012 [ ] Net off i.e. On beneficiary" -> Extract "123456789012".
+            * Given: "Account to be debited for charges of HDFC Bank Ltd. [ ] on us a/c no: 123456789012 [X] Net off i.e. On beneficiary" -> Extract **null**.
+            * Given: "Account to be debited for charges of HDFC Bank Ltd. [X] on us (no account number here) ... " AND "DEBIT ACCOUNT NO" is "9876543210" -> Extract "9876543210".
+            * Given: "Account to be debited for charges of HDFC Bank Ltd. (nothing selected) ..." AND "DEBIT ACCOUNT NO" is "9876543210" -> Extract "9876543210" (as per default rule).
 
-    **Output Requirements:**
-    * **Format:** Return the extracted fee account number as a **string**.
-    * **If Not Found or Same as Debit:** If no *separate* fee account is specified, or if it's explicitly stated that fees are from the main debit account, return **null**. This field is specifically for a *different* fee account. If charges are from "on us a/c no X", then X is the fee account.
-    """,
-        },
+            **Output Requirements:**
+            * **Format:** Return the extracted fee account number as a **string**.
+            * **If Not Found (and fallback does not apply as per rules):** If, after applying the logic, no specific "on us" account is found, "on beneficiary" is selected, or the conditions for fallback are not met, return **null**.
+            """
+    },
         {
             "name": "LATEST SHIPMENT DATE",
             "description": """
@@ -1037,55 +1042,49 @@ DOCUMENT_FIELDS = {
         {
             "name": "INVOICE DATE",
             "description": """
-    **You are an expert data extraction system. Your task is to extract the Invoice Date referenced in the Customer Request Letter (CRL).**
+            **You are an expert data extraction system. Your task is to extract the Invoice Date referenced in the Customer Request Letter (CRL), specifically from the proforma invoice details section.**
 
-    **Objective:** Accurately locate and extract the date on which the referenced Proforma or Commercial Invoice (identified by 'INVOICE NO') was issued. This information is extracted *from the CRL itself* where it makes reference to an invoice's date.
+            **Objective:** Accurately locate and extract the date on which the referenced Proforma or Commercial Invoice was issued. This information is extracted *from the CRL itself* where it refers to an invoice's date within a specific section.
 
-    **Guidance for Extraction:**
-    1.  **Identification Cues:**
-        * **Labels within CRL:** Look for labels such as 'Invoice Date:', 'Date of Invoice:', 'PI Date:', 'Proforma Invoice Date:'. Often found near the 'INVOICE NO'.
-        * **Location:** Typically in the same section of the CRL as the referenced 'INVOICE NO'.
-        * **Format:** Dates can appear in various formats.
-    2.  **What to Extract:**
-        * Extract the complete date from the CRL that refers to the invoice's issuance date.
+            **Guidance for Extraction:**
+            1.  **Primary Location Rule:** The Invoice Date MUST be extracted from the details associated with a proforma invoice listed under a section broadly titled or identified by phrases like **"Shipment details & Proforma Invoice details mandatory for Advance Import Payment"** or similar, indicating a section for proforma invoice information.
+            2.  **Specific Sub-Location:** Within this broader "Shipment details..." section, look for a line item or sub-section that is explicitly labeled or clearly identifiable as **'Proforma Invoice details'**, **'Proforma Invoice No.'**, **'PROFORM NO.'** or similar. This line will contain the specific details of the proforma invoice being referenced for the payment.
+            3.  **Target Information:** From this specific 'Proforma Invoice details' line/sub-section, extract the value associated with a **'Date'** label.
+            4.  **Contextual Confirmation:** The date found here should be the issuance date of the proforma invoice whose number and amount are also typically listed in the same 'Proforma Invoice details' line/sub-section.
+            5.  **Format:** Dates can appear in various formats (e.g., DD-MM-YYYY, MM/DD/YYYY, YYYY-MM-DD, DD/MM/YY, DD MON YYYY).
 
-    **Examples of Invoice Date text found in a CRL:**
-    * "Invoice Date: 10-07-2024"
-    * "Date of Invoice: July 10, 2024"
-    * "Proforma Invoice KET-20231222 Date 22/12/2023" (Extract "22/12/2023")
+            **Example based on typical layout (within the 'Shipment details...' section):**
+            * A row/entry like: "Proforma Invoice details PROFORM NO. XXXXXX Date YY/YY/YYYY Amount ZZZZ.ZZ"
+                * Here, you would extract "YY/YY/YYYY" as the Invoice Date.
 
-    **Output Requirements:**
-    * **Format:** Standardize and return the extracted date in **DD-MM-YYYY** format.
-    * **If Not Found:** If no invoice date is referenced in the CRL, return **null**.
-    """,
-        },
-        {
-            "name": "INVOICE VALUE",
-            "description": """
-    **You are an expert data extraction system. Your task is to extract the Invoice Value referenced in the Customer Request Letter (CRL).**
+            **Output Requirements:**
+            * **Format:** Standardize and return the extracted date in **DD-MM-YYYY** format. For example, if "02/10/2023" is found, output "02-10-2023". If "Oct 2, 2023" is found, output "02-10-2023".
+            * **If Not Found:** If the Invoice Date cannot be identified within the specified 'Proforma Invoice details' sub-section under the broader 'Shipment details...' section, return **null**. Do not extract dates from other parts of the document for this field.
+            """
+    },
+    {
+      "name": "INVOICE VALUE",
+      "description": """
+    **You are an expert data extraction system. Your task is to extract the Invoice Value referenced in the Customer Request Letter (CRL), specifically from the proforma invoice details section.**
 
-    **Objective:** Accurately locate and extract the total monetary value stated on the referenced Proforma or Commercial Invoice, as mentioned in the CRL. This value should ideally align with the 'REMITTANCE AMOUNT' if the full invoice value is being paid through this CRL.
+    **Objective:** Accurately locate and extract the total monetary value stated on the referenced Proforma or Commercial Invoice, as mentioned in the CRL. This value is found within a specific section detailing the proforma invoice.
 
     **Guidance for Extraction:**
-    1.  **Identification Cues:**
-        * **Labels within CRL:** Look for labels such as 'Invoice Amount:', 'Invoice Total Value:', 'Value of Invoice:', 'Invoice Value:'. Often found near the 'INVOICE NO' and 'INVOICE DATE' within the CRL.
-        * **Location:** Typically in the same section of the CRL as other referenced invoice details.
-        * **Format:** Numerical value, potentially with currency information (though currency might be implicit from remittance currency).
-    2.  **What to Extract:**
-        * Extract the **numerical value** of the invoice as stated in the CRL.
-        * Include decimal places if present.
-        * The currency might be mentioned alongside (e.g., "USD 21712.18"); extract only the numerical part "21712.18". The currency of the invoice is often the same as 'REMITTANCE CURRENCY'.
+    1.  **Primary Location Rule:** The Invoice Value MUST be extracted from the details associated with a proforma invoice listed under a section broadly titled or identified by phrases like **"Shipment details & Proforma Invoice details mandatory for Advance Import Payment"** or similar, indicating a section for proforma invoice information.
+    2.  **Specific Sub-Location:** Within this broader "Shipment details..." section, look for a line item or sub-section that is explicitly labeled or clearly identifiable as **'Proforma Invoice details'**, **'Proforma Invoice No.'**, **'PROFORM NO.'** or similar. This line will contain the specific details of the proforma invoice being referenced for the payment.
+    3.  **Target Information:** From this specific 'Proforma Invoice details' line/sub-section, extract the value associated with an **'Amount'** or **'Value'** label. The currency may or may not be present immediately next to the amount, but extract only the numerical value.
+    4.  **Contextual Confirmation:** The value found here should be the total amount of the proforma invoice whose number and date are also typically listed in the same 'Proforma Invoice details' line/sub-section. This value should ideally align with the 'REMITTANCE AMOUNT' if the full invoice value is being paid.
+    5.  **Format:** Numerical value, potentially with currency information (e.g., "EUR 1234.56", "USD 5000"). Extract only the numerical part.
 
-    **Examples of Invoice Value text found in a CRL:**
-    * "Invoice Amount: 21712.18" (Extract "21712.18")
-    * "Invoice Total Value: USD 150,000.00" (Extract "150000.00")
-    * "Amount USD 638.40" (under an invoice details section, extract "638.40")
+    **Example based on typical layout (within the 'Shipment details...' section):**
+    * A row/entry like: "Proforma Invoice details PROFORM NO. XXXXXX Date YY/YY/YYYY Amount CUR ZZZZ.ZZ"
+        * Here, you would extract "ZZZZ.ZZ" as the Invoice Value.
 
     **Output Requirements:**
-    * **Format:** Return the extracted amount as a **numerical value (float or decimal type if possible, otherwise string representing the number, e.g., "21712.18")**. Remove currency symbols/codes and thousands separators.
-    * **If Not Found:** If no invoice value is referenced in the CRL, return **null**.
-    """,
-        },
+    * **Format:** Return the extracted amount as a **numerical value (float or decimal type if possible, otherwise a string representing the number, e.g., "21712.18")**. Remove any currency symbols (e.g., $, €), currency codes (e.g., USD, EUR), or thousands separators (like commas) before converting to a number, but retain the decimal separator (e.g., "."). For example, if "EUR 1,676.76" is found, output "1676.76".
+    * **If Not Found:** If the Invoice Value cannot be identified within the specified 'Proforma Invoice details' sub-section under the broader 'Shipment details...' section, return **null**. Do not extract amounts from other parts of the document for this field.
+    """
+    },
         {
             "name": "EXCHANGE RATE",
             "description": """
