@@ -523,11 +523,11 @@ DOCUMENT_FIELDS = {
     2.  **What to Extract:**
         * Extract the **full and complete mailing address** as a single continuous string.
         * Include all lines of the address. Preserve line breaks with a space or newline character if meaningful for readability, but the final output should be one string.
-        * Do not include the Applicant Name itself in the address string if it's clearly separate.
+        * Do include the Applicant Name itself in the address string.
 
     **Examples of Applicant Address text:**
     * "456 Business Park, Suite 101, Metro City, MC 67890, Localia"
-    * "A-112, KUSHAL MANGAL IND'S ESTATE TUNGAR PHATA, NEAR WESTER EXPRESS HIGHWAY, VASAI EAST 401208"
+    * "Prashant Gosh, A-112, KUSHAL MANGAL IND'S ESTATE TUNGAR PHATA, NEAR WESTER EXPRESS HIGHWAY, VASAI EAST 401208"
 
     **Output Requirements:**
     * **Format:** Return the extracted address as a **single string**.
@@ -548,20 +548,20 @@ DOCUMENT_FIELDS = {
         * **Location:**
             * Often found as the last part of the applicant's full address.
             * May be on a separate line near the address or in a dedicated 'Country' field within applicant details.
+            * May not be explicitly mentioned as well, in which we need to make the obvious guess from the address.
         * **Context:** This should be the country associated with the applicant's main address.
     2.  **What to Extract:**
-        * Extract the full name of the country.
+        * Extract the name of country and return it as the country code for that country.
         * Avoid extracting city or state names as the country.
 
     **Examples of Applicant Country text:**
-    * "India"
-    * "United Kingdom"
-    * "Localia" (if 'Localia' is used as a country name in the example context)
+    * "IN"
+    * "UK"
 
     **Output Requirements:**
     * **Format:** Return the extracted country name as a **string**.
     * **If Not Found:** If the Applicant Country cannot be clearly identified or is absent, return **null**.
-    * **Standardization (Optional):** If possible, standardize to common country names. If unsure, extract as written.
+    * **Standardization (Optional):** If possible, standardize to common country codes. If unsure, extract as written.
     """,
         },
         {
@@ -690,7 +690,7 @@ DOCUMENT_FIELDS = {
 
     **Guidance for Extraction:**
     1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'Latest Shipment Date:', 'Shipment by:', 'Latest Date of Shipment:', 'LSD:'.
+        * **Labels:** Look for labels such as 'Latest Shipment Date:', 'Shipment by:', 'Latest Date of Shipment:', 'LSD:', 'Expected Date of Despatch:'.
         * **Location:** This date is typically found in sections detailing shipping terms, Letter of Credit conditions, or purchase order specifics.
         * **Format:** Dates can appear in various formats (e.g., DD-MM-YYYY, MM/DD/YYYY, YYYY-MON-DD).
     2.  **What to Extract:**
@@ -699,6 +699,7 @@ DOCUMENT_FIELDS = {
     **Examples of Latest Shipment Date text:**
     * "Latest Shipment Date: 31-12-2024"
     * "Shipment by: 15/01/2025"
+    * "Expected Date of Despatch: 30.05.2005"
 
     **Output Requirements:**
     * **Format:** Standardize and return the extracted date in **DD-MM-YYYY** format.
@@ -760,29 +761,29 @@ DOCUMENT_FIELDS = {
             "description": """
     **You are an expert data extraction system. Your task is to extract who bears the Foreign Bank Charges from the document.**
 
-    **Objective:** Accurately locate and extract the instruction indicating who is responsible for paying foreign bank charges. This is typically represented by a three-letter code: BEN (Beneficiary), OUR (Applicant), or SHA (Shared).
+    **Objective:** Accurately locate and extract the instruction indicating who is responsible for paying foreign bank charges. This is typically represented by a one-letter code: O (Beneficiary), or U (Applicant). 
 
     **Guidance for Extraction:**
     1.  **Identification Cues:**
         * **Labels:** Look for labels such as 'Foreign Bank Charges:', 'Details of Charges:', 'Charges Borne By:', 'Bank Charges:'.
         * **Location:** Often found in a section related to payment details or charges.
-        * **Content:** The value is usually one of 'BEN', 'OUR', or 'SHA'. Sometimes options are presented with checkboxes or one is circled.
-            * **BEN:** Beneficiary pays all charges (foreign bank charges deducted from remittance).
-            * **OUR:** Applicant/Remitter pays all charges (beneficiary receives full amount).
-            * **SHA:** Applicant pays their bank's charges, Beneficiary pays their bank's charges (shared).
+        * **Content:** The value is usually one of 'U', or 'B'. Sometimes options are presented with checkboxes or one is circled.
+            * **U:** Beneficiary pays all charges (foreign bank charges deducted from remittance).
+            * **O:** Applicant/Remitter pays all charges (beneficiary receives full amount).
+            * **In case neither is ticked:** The default value remains 'U'.
     2.  **What to Extract:**
-        * Extract the specific code (BEN, OUR, SHA) or word indicating the responsible party.
-        * If options are given (e.g., checkboxes for "on us", "on beneficiary"), determine which is selected. "on us" generally maps to OUR, "on beneficiary" to BEN.
+        * Extract the specific code (U, O) or word indicating the responsible party.
+        * If options are given (e.g., checkboxes for "on us", "on beneficiary"), determine which is selected. "on us" generally maps to U, "on beneficiary" to O.
 
     **Examples of FB Charges text:**
-    * "Foreign Bank Charges: BEN" (Extract "BEN")
-    * "Details of Charges: OUR" (Extract "OUR")
-    * A checkbox next to "OUR" is marked. (Extract "OUR")
-    * "Charges: ()on us (X)on beneficiary" (Extract "BEN" as 'on beneficiary' is selected)
+    * "Foreign Bank Charges: BEN" (Extract "O")
+    * "Details of Charges: OUR" (Extract "U")
+    * A checkbox next to "OUR" is marked. (Extract "U")
+    * "Charges: ()on us (X)on beneficiary" (Extract "O" as 'on beneficiary' is selected)
 
     **Output Requirements:**
-    * **Format:** Return the extracted code/term as a **string** (e.g., "BEN", "OUR", "SHA").
-    * **If Not Found:** If the instruction for foreign bank charges cannot be clearly identified, return **null**.
+    * **Format:** Return the extracted code/term as a **string** (e.g., "O", "U").
+    * **If Not Found:** If the instruction for foreign bank charges cannot be clearly identified, return **"U"**.
     """,
         },
         {
