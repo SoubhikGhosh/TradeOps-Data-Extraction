@@ -287,39 +287,35 @@ DOCUMENT_FIELDS = {
         {
             "name": "BENEFICIARY ACCOUNT NO / IBAN",
             "description": """
-            **You are an expert data extraction system. Your task is to extract the Beneficiary's Bank Account Number or IBAN from the document.**
+                **You are an expert data extraction system. Your task is to extract the Beneficiary's Bank Account Number or IBAN from the document.**
 
-            **Objective:** Accurately locate and extract the specific bank account number or International Bank Account Number (IBAN) designated for the beneficiary, where funds are to be credited.
+                **Objective:** Accurately locate and extract the beneficiary's bank account number or International Bank Account Number (IBAN) where the funds are to be credited.
 
-            **Guidance for Extraction:**
-            1.  **Primary Focus - Beneficiary Context:**
-                * Concentrate on sections explicitly labeled for 'Beneficiary', 'Beneficiary Bank Details', 'Payment To', 'Remit To', or similar terms indicating the recipient of funds.
-                * **Crucially, distinguish** this from any account details provided for the payer, sender, buyer, or ordering customer. Do NOT extract account numbers belonging to these parties.
+                **Guidance for Extraction:**
+                1.  **Identification Cues:**
+                    * **Labels:** Look for labels such as 'Account No.:', 'A/C No.:', 'Account Number:', 'Beneficiary Account No.:', 'IBAN:', 'Beneficiary IBAN:', 'Acc No:', 'A/c ID:'.
+                    * **Location:** This information is typically found within the 'Beneficiary Details' or 'Beneficiary Bank Details' section, often close to the beneficiary's name and bank name.
+                    * **Format:**
+                        * **Account Numbers** vary widely in format. For Indian bank accounts, these are typically numeric and can have variable lengths (e.g., 9 to 18 digits or more). They may sometimes contain leading zeros or other special characters as part of the number.
+                        * **IBANs** have a specific structure: they start with a two-letter country code, followed by two check digits, and then a country-specific Basic Bank Account Number (BBAN) which can be up to 30 alphanumeric characters (e.g., DE89370400440532013000, GB29NWBK60161331926819).
+                2.  **What to Extract:**
+                    * Extract the **complete and exact account number or IBAN** as it appears in the document.
+                    * Include all alphanumeric characters and any embedded hyphens or spaces if they are clearly part of the presented number (though normalization might occur later, for extraction, capture as presented).
+                    * **Crucially, pay close attention to repeated digits (e.g., '00', '111', '5555') and ensure they are captured accurately and not collapsed or reduced to a single digit.** For example, if the number is "00123", extract "00123", not "0123". If it's "444777", extract "444777", not "47".
+                    * For Indian bank account numbers, ensure the entire sequence of digits is captured, respecting their variable length.
+                    * If both an IBAN and a local account number are present for the beneficiary, prioritize the IBAN.
 
-            2.  **Identification Cues:**
-                * **Labels:** Look for labels directly associated with the beneficiary's account, such as 'Account No.:', 'A/C No.:', 'Account Number:', 'Beneficiary Account No.:', 'IBAN:', 'Beneficiary IBAN:', 'Acc No:', 'A/c ID:', 'Payee Account:', 'Recipient Account No:'.
-                * **Location:** This information is typically found within the clearly demarcated 'Beneficiary Details' or 'Beneficiary Bank Details' section, often in proximity to the beneficiary's name and bank name.
-                * **Format:**
-                    * **Account Numbers:** Vary widely (can be numeric, alphanumeric, may contain hyphens or spaces).
-                    * **IBANs:** Have a standard structure: a two-letter country code, two check digits, and then a country-specific Basic Bank Account Number (BBAN) which can be up to 30 alphanumeric characters (e.g., DE89370400440532013000, GB29NWBK60161331926819).
+                **Examples of Account No / IBAN text:**
+                * "IBAN: DE89370400440532013000"
+                * "Account No.: 001-234567-890" (Ensure repeated '0's are kept)
+                * "A/C No: 218246110956" (Ensure repeated '1's are kept)
+                * "Beneficiary Account Number: FR7630006000011234567890189"
 
-            3.  **What to Extract:**
-                * Extract the **complete and exact account number or IBAN** as it appears visually.
-                * Include all alphanumeric characters and any embedded hyphens or spaces if they are part of the presented number. (Normalization by removing spaces/hyphens can be a separate, subsequent step if required).
-                * If both an IBAN and a local account number are clearly present *for the same beneficiary*, prioritize extracting the **IBAN**.
-
-            **Examples of Account No / IBAN text:**
-            * "IBAN: DE89370400440532013000"
-            * "Account No.: 001-234567-890"
-            * "A/C No: 218246110956"
-            * "Beneficiary Account Number: FR7630006000011234567890189"
-            * "Payee Account: SG9000123456789012"
-
-            **Output Requirements:**
-            * **Format:** Return the extracted account number or IBAN as a single **string**.
-            * **If Not Found:** If the Beneficiary Account No / IBAN cannot be clearly and confidently identified according to the guidelines above, or if the relevant section is missing from the document, return **null**.
-            * **Ambiguity:** If multiple distinct numbers could fit the beneficiary account description in a confusing manner, and a single definitive one cannot be chosen, it is preferable to return **null** rather than a guess to maintain data accuracy.
-            """,
+                **Output Requirements:**
+                * **Format:** Return the extracted account number or IBAN as a **string**.
+                * **If Not Found:** If the Beneficiary Account No / IBAN cannot be clearly identified, return **null**.
+                * **Normalization Note:** While extracting as presented, downstream processes might normalize by removing spaces and hyphens. The key for this step is complete and accurate character capture.
+                """,
         },
         {
             "name": "BENEFICIARY BANK",
@@ -639,47 +635,56 @@ DOCUMENT_FIELDS = {
         * **Labels:** Look for labels such as 'Debit Account No.:', 'Account to be Debited:', 'Source Account:', 'From Account:', 'Applicant Account No.:', 'Our Account No.:', 'A/C No:'.
         * **Location:** Typically found in the payment instruction section, often associated with the applicant's details or where funding for the transaction is specified.
         * **Context:** This account belongs to the applicant/customer making the payment, not the beneficiary. It is the source of funds for the main remittance amount.
-        * **Format:** Account numbers vary widely (numeric, alphanumeric, may include hyphens).
+        * **Format:** Account numbers vary. Indian bank account numbers are typically numeric and can have variable lengths (e.g., 9 to 18 digits or more). They might contain leading zeros.
     2.  **What to Extract:**
         * Extract the **complete and exact account number**.
-        * Sometimes the account number might be prefixed by currency (e.g., "INR A/C No: 50200040555100"); extract only the account number "50200040555100".
+        * Sometimes the account number might be prefixed by currency or other text (e.g., "INR A/C No: 50200030838696"); extract only the account number itself ("50200030838696" in this example).
+        * **Crucially, ensure all digits, including any repeated digits (e.g., '00', '777', '2222'), are extracted precisely as they appear and are not collapsed.** For instance, if "Account No: 0045600" is written, extract "0045600", not "04560".
+        * For Indian bank accounts, capture the entire numeric sequence as presented.
         * Ensure it is explicitly linked to debiting for the main remittance, not just for fees (see 'FEE ACCOUNT NO').
 
     **Examples of Debit Account No text:**
     * "Debit Account No.: 123456789012"
-    * "Account to be Debited: 00501000012345"
-    * "INR A/C No: 50200040555100" (Extract "50200040555100")
+    * "Account to be Debited: 00501000012345" (Extract "00501000012345", preserving all zeros and repeated digits)
+    * "INR A/C No: 50200030838696" (Extract "50200030838696")
 
     **Output Requirements:**
     * **Format:** Return the extracted account number as a **string**.
     * **If Not Found:** If the Debit Account Number for the principal amount cannot be clearly identified, return **null**.
-    * **Clarification:** If the same account is used for both principal and fees, this field should still be populated. If a separate fee account is mentioned, that goes into 'FEE ACCOUNT NO'.
+    * **Clarification:** If the same account is used for both principal and fees, this field should still be populated.
     """,
         },
         {
             "name": "FEE ACCOUNT NO",
             "description": """
-    **You are an expert data extraction system. Your task is to extract the Applicant's Fee Account Number from the document, if specified as different from the main debit account.**
+    **You are an expert data extraction system. Your task is to extract the Applicant's Fee Account Number from the document, specifically for HDFC Bank Ltd. charges, if applicable.**
 
-    **Objective:** Accurately locate and extract the applicant's bank account number from which transaction fees or charges will be debited, IF this account is explicitly stated as being separate from the 'DEBIT ACCOUNT NO' used for the principal remittance amount.
+    **Objective:** Accurately locate and extract the applicant's bank account number from which HDFC Bank Ltd.'s own charges for the transaction will be debited.
 
     **Guidance for Extraction:**
-    1.  **Identification Cues:**
-        * **Labels:** Look for labels specifically indicating an account for charges, such as 'Fee Account No.:', 'Charges Account:', 'Account for Charges:', 'Debit Charges from A/c:'.
-        * **Location:** Often found near the main debit account information or in a section discussing bank charges.
-        * **Context:** The key is that this account is *specifically designated for fees* and is potentially different from the account debited for the remittance amount.
-    2.  **What to Extract:**
-        * Extract the **complete and exact account number** if a separate account for fees is explicitly mentioned.
-        * If the document indicates fees are to be debited from the same account as the principal, or if no separate fee account is mentioned, this field should reflect that (e.g., by being null or by instruction).
-        * Example context: "Account to be debited for charges of HDFC Bank Ltd. on us a/c no 50200040555100". Here, 50200040555100 is the fee account.
+    1.  **Primary Location:** This information is typically found in a tabular section on the **first page**, often under or near the applicant's primary debit account details. Specifically, look for a line item related to how the bank's (e.g., HDFC Bank Ltd.) charges are handled.
+    2.  **Key Label:** Identify the row or section labeled similar to **"Account to be debited for charges of HDFC Bank Ltd."** or "Charges of HDFC Bank Ltd.".
+    3.  **Determining the Account:**
+        * **Option 1 (Primary Target):** Within this "charges" section, look for an option like **"on us"** (or "Applicant," "Self," "Our Account"). Check if this option is selected (e.g., by a tick, mark, "X", or wording like "Won us").
+            * If "on us" is selected AND an account number is **explicitly provided directly alongside or immediately following this "on us" option** (e.g., "on us a/c no: XXXXXXXXXX"), extract that account number. This is the preferred Fee Account Number.
+        * **Option 2 (Beneficiary Pays):** If an option like **"on beneficiary"** or "Net off i.e. On beneficiary" is selected for HDFC Bank Ltd.'s charges, it means the applicant is not bearing these charges from their account. In this case, return **null**.
+        * **Option 3 (Fallback to Main Debit Account / Ambiguity):**
+            * If "on us" is selected but **no specific account number is provided next to it**, OR
+            * If **neither "on us" nor "on beneficiary" is clearly selected** for HDFC Bank Ltd. charges (and it's assumed the applicant bears them by default),
+            * Then, as a fallback, use the account number specified as the main **"DEBIT ACCOUNT NO"** (the account from which the principal remittance amount is debited). You will need to refer to the value extracted for the "DEBIT ACCOUNT NO" field.
+    4.  **What to Extract:**
+        * Extract the **complete and exact account number** based on the logic above.
+        * Remove any prefixes like "a/c no:", "INR A/C No:", etc., to get the raw account number.
+        * **When extracting any account number (either the explicitly stated fee account or the fallback debit account), be meticulous in capturing all digits, especially repeated ones (e.g., '00', '222', '8888'), to ensure the full and accurate number is extracted.** Indian bank account numbers are typically numeric and vary in length; ensure the complete sequence is captured. For example, if "a/c no: 0098700" is found, extract "0098700".
 
-    **Examples of Fee Account No text (when different):**
-    * "Fee Account No.: 987654321000"
-    * "Charges to be debited from A/C: 112233445566"
+    **Examples based on typical layouts:**
+    * Given: "Account to be debited for charges of HDFC Bank Ltd. [X] on us a/c no: 12300045600" -> Extract "12300045600" (preserving repeated '0's).
+    * Given: "Account to be debited for charges of HDFC Bank Ltd. [ ] on us a/c no: 123456789012 [X] Net off i.e. On beneficiary" -> Extract **null**.
+    * Given: "Account to be debited for charges of HDFC Bank Ltd. [X] on us (no account number here) ... " AND "DEBIT ACCOUNT NO" is "9876005000" -> Extract "9876005000" (preserving its repeated '0's).
 
     **Output Requirements:**
     * **Format:** Return the extracted fee account number as a **string**.
-    * **If Not Found or Same as Debit:** If no *separate* fee account is specified, or if it's explicitly stated that fees are from the main debit account, return **null**. This field is specifically for a *different* fee account. If charges are from "on us a/c no X", then X is the fee account.
+    * **If Not Found (and fallback does not apply as per rules):** If, after applying the logic, no specific "on us" account is found, "on beneficiary" is selected, or the conditions for fallback are not met, return **null**.
     """,
         },
         {
