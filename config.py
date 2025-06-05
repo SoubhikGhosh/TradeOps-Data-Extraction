@@ -322,29 +322,31 @@ DOCUMENT_FIELDS = {
             "description": """
     **You are an expert data extraction system. Your task is to extract the Beneficiary Bank Name from the document.**
 
-    **Objective:** Accurately locate and extract the full official name of the bank where the beneficiary holds their account.
+    **Objective:** Accurately locate and extract the full official name of the bank where the beneficiary holds their account, primarily from a structured table.
 
     **Guidance for Extraction:**
     1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'Beneficiary Bank:', 'Bank Name:', 'Beneficiary's Bank:', 'Receiving Bank:', 'Payee Bank:'.
-        * **Location:** Usually listed in the 'Beneficiary Bank Details' section, typically near the beneficiary's account number and the bank's SWIFT code or address.
-        * **Content:** This is the name of a financial institution.
+        * **Primary Label and Location:** Look for a section or row in a table, typically labeled something like **'(A)Beneficiary Bank ACCOUNT NO Beneficiary Bank name, address& Wire details'** or simply **'Beneficiary Bank name, address& Wire details'**.
+        * **Other Labels:** Also consider general labels such as 'Beneficiary Bank:', 'Bank Name:', 'Beneficiary's Bank:', 'Receiving Bank:', 'Payee Bank:'.
+        * **Context:** The bank name is usually listed near the beneficiary's account number and the bank's SWIFT code or address. It is the name of a financial institution.
     2.  **What to Extract:**
+        * From the field identified (which might contain the bank name, address, and wire details together), **extract only the bank's official name.**
+        * The bank name is often the first part of this combined string or is a recognizable name of a financial institution (e.g., "Banco Sabadell", "HSBC Bank", "Standard Chartered Bank").
         * Extract the **full and official name** of the bank.
-        * Include any suffixes like 'Ltd.', 'PLC', 'Inc.', 'N.A.', 'AG'.
+        * Include any suffixes like 'Ltd.', 'PLC', 'Inc.', 'N.A.', 'AG', 'S.A.', 'S.A.U'.
         * Be mindful of common bank name components (e.g., "Bank of ...", "... Commercial Bank", "First National ...").
     3.  **Handling Variations:**
         * Bank names can be long. Ensure the full name is captured.
-        * The document might use slight variations or abbreviations; try to capture the most complete official name presented. The term "Beneficiary Bank" is standard, but documents might have typos like "Beneficary Bank"; your search should be robust to minor variations if context is clear.
+        * The document might use slight variations or abbreviations; try to capture the most complete official name presented.
 
-    **Examples of Beneficiary Bank text:**
-    * "Beneficiary Bank: Global Standard Commercial Bank"
-    * "Bank Name: Exporter's First Union Bank PLC"
-    * "BANK OF CHINA LINQU SUB BRANCH"
+    **Examples of Beneficiary Bank text (from a combined field):**
+    * "Banco Sabadell: ES1300815181000001071017 SWIFT: BSABESBBXXX" (Extract "Banco Sabadell")
+    * "Beneficiary Bank name, address& Wire details: HSBC Bank PLC, 1 Queen's Road, Hong Kong, SWIFT: HSBCHKHH" (Extract "HSBC Bank PLC")
+    * "BANK OF CHINA LINQU SUB BRANCH NO 188 MINZHU ROAD..." (Extract "BANK OF CHINA LINQU SUB BRANCH")
 
     **Output Requirements:**
     * **Format:** Return the extracted bank name as a **string**.
-    * **If Not Found:** If the Beneficiary Bank name cannot be clearly identified, return **null**.
+    * **If Not Found:** If the Beneficiary Bank name cannot be clearly identified and isolated, return **null**.
     """,
         },
         {
@@ -487,26 +489,23 @@ DOCUMENT_FIELDS = {
 
     **Guidance for Extraction:**
     1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'Applicant Name:', 'Customer Name:', 'From:', 'Name of Applicant:', 'Remitter Name:'.
-        * **Location:**
-            * Often found in the letterhead at the top of the document.
-            * Near the applicant's address.
-            * In a specific field designated for applicant/customer name.
-            * As the sender in the opening or closing of the letter.
+        * **Primary Label and Location:** The Applicant Name is often found in the **first row of a table structure at the beginning of the document**, typically associated with the label **'Name & Address of the Customer'**.
+        * **Other Labels:** Also look for general labels such as 'Applicant Name:', 'Customer Name:', 'From:', 'Name of Applicant:', 'Remitter Name:'.
         * **Context:** This is the entity initiating the request or transaction described in the document.
     2.  **What to Extract:**
+        * From the identified field (e.g., under 'Name & Address of the Customer'), extract **only the applicant's name**. Do not include the address if it is part of the same field value.
         * Extract the **full and complete legal name** as it appears.
         * Include any legal suffixes (e.g., Ltd., Inc., LLC, Corp., Pvt. Ltd.).
         * If it's an individual, extract their full name.
 
     **Examples of Applicant Name text:**
-    * "Applicant Name: Local Importers LLC"
-    * "TRIDISENO INDIA LIMITED" (from letterhead or a field)
-    * "Customer: Alpha Trading Enterprises"
+    * Under "Name & Address of the Customer": "Grescasa India Private Limited. 5- E. Laxmi Industrial Estate, New Link Road, Andheri (W), Mumbai 400 053" (Extract "Grescasa India Private Limited.")
+    * "Applicant Name: Local Importers LLC" (Extract "Local Importers LLC")
+    * "TRIDISENO INDIA LIMITED" (from letterhead or a field) (Extract "TRIDISENO INDIA LIMITED")
 
     **Output Requirements:**
     * **Format:** Return the extracted name as a **string**.
-    * **If Not Found:** If the Applicant Name cannot be clearly identified, return **null**.
+    * **If Not Found:** If the Applicant Name cannot be clearly identified based on the primary cues or other indicators, return **null**.
     * **Distinction:** Differentiate from the Beneficiary Name. The Applicant is the one making the payment/request.
     """,
         },
@@ -628,25 +627,25 @@ DOCUMENT_FIELDS = {
             "description": """
     **You are an expert data extraction system. Your task is to extract the Applicant's Debit Account Number from the document.**
 
-    **Objective:** Accurately locate and extract the applicant's bank account number from which the principal transaction funds will be debited.
+    **Objective:** Accurately locate and extract the applicant's bank account number from which the principal transaction funds will be debited. Focus on high accuracy for OCR, particularly for numeric sequences.
 
     **Guidance for Extraction:**
     1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'Debit Account No.:', 'Account to be Debited:', 'Source Account:', 'From Account:', 'Applicant Account No.:', 'Our Account No.:', 'A/C No:'.
-        * **Location:** Typically found in the payment instruction section, often associated with the applicant's details or where funding for the transaction is specified.
+        * **Primary Labels:** Look for labels such as 'Account to be debited as applicable', 'Accounttobedebitedasapplicable', 'Debit Account No.:', 'Account to be Debited:', 'Source Account:', 'From Account:', 'Applicant Account No.:', 'Our Account No.:', 'A/C No:'.
+        * **Prefix:** The account number is often preceded by a currency indicator and account type, specifically look for 'INR A/C No:'.
+        * **Location:** Typically found in the payment instruction section, often associated with the applicant's details or where funding for the transaction is specified. In tabular formats, it might be under a general "Account to be debited" heading.
         * **Context:** This account belongs to the applicant/customer making the payment, not the beneficiary. It is the source of funds for the main remittance amount.
-        * **Format:** Account numbers vary. Indian bank account numbers are typically numeric and can have variable lengths (e.g., 9 to 18 digits or more). They might contain leading zeros.
     2.  **What to Extract:**
         * Extract the **complete and exact account number**.
-        * Sometimes the account number might be prefixed by currency or other text (e.g., "INR A/C No: 50200030838696"); extract only the account number itself ("50200030838696" in this example).
-        * **Crucially, ensure all digits, including any repeated digits (e.g., '00', '777', '2222'), are extracted precisely as they appear and are not collapsed.** For instance, if "Account No: 0045600" is written, extract "0045600", not "04560".
-        * For Indian bank accounts, capture the entire numeric sequence as presented.
+        * **Crucially, after identifying the phrase (e.g., "INR A/C No: 50200030838696"), extract only the numerical account number itself (e.g., "50200030838696").**
+        * **Accuracy is paramount:** Ensure all digits, including any leading zeros or repeated digits (e.g., '00', '777', '2222'), are extracted precisely as they appear and are not collapsed or misinterpreted. For instance, if "Account No: 0045600" is written, extract "0045600", not "04560".
+        * The extracted account number should conform to typical bank account number formats (usually a sequence of digits of varying length, e.g., 9 to 18 digits for Indian banks).
         * Ensure it is explicitly linked to debiting for the main remittance, not just for fees (see 'FEE ACCOUNT NO').
 
     **Examples of Debit Account No text:**
-    * "Debit Account No.: 123456789012"
+    * "Account to be debited as applicable INR A/C No: 50200030838696" (Extract "50200030838696")
+    * "Debit Account No.: 123456789012" (Extract "123456789012")
     * "Account to be Debited: 00501000012345" (Extract "00501000012345", preserving all zeros and repeated digits)
-    * "INR A/C No: 50200030838696" (Extract "50200030838696")
 
     **Output Requirements:**
     * **Format:** Return the extracted account number as a **string**.
@@ -721,16 +720,16 @@ DOCUMENT_FIELDS = {
 
     **Guidance for Extraction:**
     1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'Port of Dispatch:', 'Port of Loading:', 'From Port:', 'Shipped From:', 'Origin Port:'.
-        * **Location:** Usually found in the shipping details section of the document, often alongside Incoterms or transport details.
-        * **Content:** This will be a geographical location name (e.g., a city name, specific port name).
+        * **Labels:** Look for labels such as 'Port of Despatch:', 'Port of Dispatch:', 'Port of Loading:', 'From Port:', 'Shipped From:', 'Origin Port:'.
+        * **Location:** This information is typically found in a section titled or related to **'Shipment details & Proforma Invoice details mandatory for Advance Import Payment'** or similar shipping details sections of the document. It's often alongside Incoterms or other transport details.
+        * **Content:** This will be a geographical location name (e.g., a city name, specific port name, or a phrase like "ANY SPANISH PORT").
     2.  **What to Extract:**
-        * Extract the full name of the dispatch port/place.
+        * Extract the full name of the dispatch port/place as stated.
 
     **Examples of Dispatch Port text:**
-    * "Port of Dispatch: Port of Hamburg"
-    * "Port of Loading: Shanghai Pudong Airport"
-    * "From: Qingdao"
+    * "Port of Despatch ANY SPANISH PORT" (Extract "ANY SPANISH PORT")
+    * "Port of Loading: Port of Hamburg" (Extract "Port of Hamburg")
+    * "From: Qingdao" (Extract "Qingdao")
 
     **Output Requirements:**
     * **Format:** Return the extracted port name as a **string**.
@@ -767,29 +766,37 @@ DOCUMENT_FIELDS = {
             "description": """
     **You are an expert data extraction system. Your task is to extract who bears the Foreign Bank Charges from the document.**
 
-    **Objective:** Accurately locate and extract the instruction indicating who is responsible for paying foreign bank charges. This is typically represented by a one-letter code: O (Beneficiary), or U (Applicant). 
+    **Objective:** Accurately locate and extract the instruction indicating who is responsible for paying foreign bank charges. This is typically represented by a one-letter code: O (Beneficiary) or U (Applicant/Us).
 
     **Guidance for Extraction:**
     1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'Foreign Bank Charges:', 'Details of Charges:', 'Charges Borne By:', 'Bank Charges:'.
-        * **Location:** Often found in a section related to payment details or charges.
-        * **Content:** The value is usually one of 'U', or 'B'. Sometimes options are presented with checkboxes or one is circled.
-            * **U:** Beneficiary pays all charges (foreign bank charges deducted from remittance).
-            * **O:** Applicant/Remitter pays all charges (beneficiary receives full amount).
-            * **In case neither is ticked:** The default value remains 'U'.
-    2.  **What to Extract:**
-        * Extract the specific code (U, O) or word indicating the responsible party.
-        * If options are given (e.g., checkboxes for "on us", "on beneficiary"), determine which is selected. "on us" generally maps to U, "on beneficiary" to O.
+        * **Labels:** Look for labels such as 'Foreign bank charges', 'Details of Charges:', 'Charges Borne By:', 'Bank Charges:'.
+        * **Location:** Often found in a section related to payment details or charges, typically towards the end of the main details table.
+        * **Selection Method:** The choice is often indicated by:
+            * A **tick mark (✓)**, which can be machine-printed or **hand-drawn**, next to an option.
+            * An 'X' in a checkbox.
+            * The words **'(YES)'** or **'(NO)'** placed next to options within parentheses, where '(YES)' indicates selection.
+            * Circling of an option.
+        * **Options typically are:**
+            * 'on us' (or similar, like 'Applicant', 'Remitter', 'OUR') - This maps to **'U'**.
+            * 'on beneficiary' (or similar, like 'Beneficiary', 'BEN') - This maps to **'O'**.
+    2.  **What to Extract (Logic):**
+        * Carefully analyze the selection indicators (ticks, (YES), 'X').
+        * If 'on us' (or its equivalent) is selected, extract **'U'**.
+        * If 'on beneficiary' (or its equivalent) is selected, extract **'O'**.
+        * If multiple options are present but only one is clearly selected (e.g., one option has a tick or '(YES)' and others are blank or have '(NO)'), use the selected option.
 
-    **Examples of FB Charges text:**
-    * "Foreign Bank Charges: BEN" (Extract "O")
-    * "Details of Charges: OUR" (Extract "U")
-    * A checkbox next to "OUR" is marked. (Extract "U")
-    * "Charges: ()on us (X)on beneficiary" (Extract "O" as 'on beneficiary' is selected)
+    **Examples of FB Charges text and extraction:**
+    * "Foreign bank charges: [✓] on us [ ] on beneficiary" (Extract "U")
+    * "Foreign bank charges: ( ) on us (✓) on beneficiary" (Extract "O")
+    * "Foreign bank charges: (YES) on us (NO) on beneficiary" (Extract "U")
+    * "Foreign bank charges: (NO) on us (YES) on beneficiary" (Extract "O")
+    * "Details of Charges: OUR" (If "OUR" clearly implies applicant pays, extract "U")
+    * "Charges: BEN" (If "BEN" clearly implies beneficiary pays, extract "O")
 
     **Output Requirements:**
-    * **Format:** Return the extracted code/term as a **string** (e.g., "O", "U").
-    * **If Not Found:** If the instruction for foreign bank charges cannot be clearly identified, return **"U"**.
+    * **Format:** Return the extracted code as a **string** ('U' or 'O').
+    * **Default if Not Found/Ambiguous:** If the instruction for foreign bank charges cannot be clearly identified, or if neither option is clearly selected (e.g., both blank, both ticked ambiguously), return **'U'** as a default.
     """,
         },
         {
