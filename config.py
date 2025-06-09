@@ -766,37 +766,30 @@ DOCUMENT_FIELDS = {
             "description": """
     **You are an expert data extraction system. Your task is to extract who bears the Foreign Bank Charges from the document.**
 
-    **Objective:** Accurately locate and extract the instruction indicating who is responsible for paying foreign bank charges. This is typically represented by a one-letter code: O (Beneficiary) or U (Applicant/Us).
+    **Objective:** Accurately locate and extract the instruction indicating who is responsible for paying foreign bank charges. This is typically represented by a one-letter code: O (Beneficiary), or U (Applicant). 
 
     **Guidance for Extraction:**
     1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'Foreign bank charges', 'Details of Charges:', 'Charges Borne By:', 'Bank Charges:'.
-        * **Location:** Often found in a section related to payment details or charges, typically towards the end of the main details table.
-        * **Selection Method:** The choice is often indicated by:
-            * A **tick mark (✓)**, which can be machine-printed or **hand-drawn**, next to an option.
-            * An 'X' in a checkbox.
-            * The words **'(YES)'** or **'(NO)'** placed next to options within parentheses, where '(YES)' indicates selection.
-            * Circling of an option.
-        * **Options typically are:**
-            * 'on us' (or similar, like 'Applicant', 'Remitter', 'OUR') - This maps to **'U'**.
-            * 'on beneficiary' (or similar, like 'Beneficiary', 'BEN') - This maps to **'O'**.
-    2.  **What to Extract (Logic):**
-        * Carefully analyze the selection indicators (ticks, (YES), 'X').
-        * If 'on us' (or its equivalent) is selected, extract **'U'**.
-        * If 'on beneficiary' (or its equivalent) is selected, extract **'O'**.
-        * If multiple options are present but only one is clearly selected (e.g., one option has a tick or '(YES)' and others are blank or have '(NO)'), use the selected option.
+        * **Labels:** Look for labels such as 'Foreign Bank Charges:', 'Details of Charges:', 'Charges Borne By:', 'Bank Charges:'.
+        * **Location:** Often found in a section related to payment details or charges.
+        * **Content:** The value is usually one of 'U', or 'B'. Sometimes options are presented with checkboxes or one is circled.
+            * **U:** Beneficiary pays all charges (foreign bank charges deducted from remittance).
+            * **O:** Applicant/Remitter pays all charges (beneficiary receives full amount).
+            * **In case neither is ticked:** The default value remains 'U'.
+    2.  **What to Extract:**
+        * Extract the specific code (U, O) or word indicating the responsible party.
+        * If options are given (e.g., checkboxes for "on us", "on beneficiary"), determine which is selected. "on us" generally maps to U, "on beneficiary" to O.
 
-    **Examples of FB Charges text and extraction:**
-    * "Foreign bank charges: [✓] on us [ ] on beneficiary" (Extract "U")
-    * "Foreign bank charges: ( ) on us (✓) on beneficiary" (Extract "O")
-    * "Foreign bank charges: (YES) on us (NO) on beneficiary" (Extract "U")
-    * "Foreign bank charges: (NO) on us (YES) on beneficiary" (Extract "O")
-    * "Details of Charges: OUR" (If "OUR" clearly implies applicant pays, extract "U")
-    * "Charges: BEN" (If "BEN" clearly implies beneficiary pays, extract "O")
+    **Examples of FB Charges text:**
+    * "Foreign Bank Charges: BEN" (Extract "O")
+    * "Details of Charges: OUR" (Extract "U")
+    * A checkbox next to "OUR" is marked. (Extract "U")
+    * A checkbox next to "on us" is marked. (Extract "U")
+    * "Charges: ()on us (X)on beneficiary" (Extract "O" as 'on beneficiary' is selected)
 
     **Output Requirements:**
-    * **Format:** Return the extracted code as a **string** ('U' or 'O').
-    * **Default if Not Found/Ambiguous:** If the instruction for foreign bank charges cannot be clearly identified, or if neither option is clearly selected (e.g., both blank, both ticked ambiguously), return **'U'** as a default.
+    * **Format:** Return the extracted code/term as a **string** (e.g., "O", "U").
+    * **If Not Found:** If the instruction for foreign bank charges cannot be clearly identified, return **"U"**.
     """,
         },
         {
@@ -2424,7 +2417,7 @@ Strictly classify the document ONLY amongst the acceptable document types.
 **Example Output:**
 ```json
 {{
-  "classified_type": "PROFORMA_INVOICE",
+  "classified_type": "INVOICE",
   "confidence": 0.98,
   "reasoning": "Document exhibits all core characteristics of a proforma invoice: details seller and buyer, lists specific goods with quantities and unit prices leading to a total amount, specifies payment terms ('50% advance...'), and indicates 'Ship Date TBD'. While not explicitly titled 'Proforma Invoice', its structure and content align perfectly with its function as a preliminary bill for initiating payment, akin to a sales order formatted for external use."
 }}
