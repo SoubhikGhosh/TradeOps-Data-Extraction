@@ -21,8 +21,8 @@ import google.api_core.exceptions as google_exceptions  # Updated import for ret
 from config import (
     PROJECT_ID, LOCATION, API_ENDPOINT, MODEL_NAME, SAFETY_SETTINGS,
     DOCUMENT_FIELDS, MAX_WORKERS, TEMP_DIR, OUTPUT_FILENAME,
-    EXTRACTION_PROMPT_TEMPLATE, CLASSIFICATION_PROMPT_TEMPLATE, # Import new template
-    SUPPORTED_MIME_TYPES, SUPPORTED_FILE_EXTENSIONS  # Import new configuration variables
+    EXTRACTION_PROMPT_TEMPLATE, CLASSIFICATION_PROMPT_TEMPLATE, 
+    SUPPORTED_MIME_TYPES, SUPPORTED_FILE_EXTENSIONS, EXCEL_COLUMN_ORDER
 )
 from utils import log, parse_filename_for_grouping # Import new parsing function
 
@@ -609,11 +609,11 @@ def process_zip_file(zip_file_path: str):
             # --- END SANITIZATION ---
 
             # Reorder columns: Case Info, Status, Classification Info, then Extracted Fields
-            cols = df.columns.tolist()
+            existing_cols = df.columns.tolist()
             core_cols = ["CASE_ID", "GROUP_Basename", "Processing_Status", "CLASSIFIED_Type", "CLASSIFICATION_Confidence", "CLASSIFICATION_Reasoning"]
-            ordered_cols = [c for c in core_cols if c in cols]
-            extracted_cols = sorted([c for c in cols if c not in core_cols])
-            df = df[ordered_cols + extracted_cols]
+            ordered_cols = [col for col in EXCEL_COLUMN_ORDER if col in existing_cols]
+            remaining_cols = sorted([col for col in existing_cols if col not in ordered_cols and col not in core_cols])
+            df = df[core_cols + ordered_cols + remaining_cols]
 
         try:
             log.info(f"Saving aggregated data to Excel: {output_excel_path}")
