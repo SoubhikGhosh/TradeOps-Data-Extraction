@@ -44,7 +44,7 @@ LOG_FILE = "app_log.log"
 LOG_LEVEL = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 # --- Column Order Configuration ---
-[
+EXCEL_COLUMN_ORDER = [
     # === Fields for CRL ===
     "CRL_APPLICANT NAME_Value",
     "CRL_APPLICANT ADDRESS_Value",
