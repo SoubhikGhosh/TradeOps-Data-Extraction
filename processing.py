@@ -63,7 +63,7 @@ def get_mime_type(file_path):
 def _call_vertex_ai_with_retry(
     model_instance: GenerativeModel,
     prompt_parts: List[Any],
-    max_retries: int = 5,
+    max_retries: int = 100,
     initial_delay: float = 1.0,
     exponential_base: float = 2.0,
     jitter: bool = True
@@ -610,10 +610,10 @@ def process_zip_file(zip_file_path: str):
 
             # Reorder columns: Case Info, Status, Classification Info, then Extracted Fields
             existing_cols = df.columns.tolist()
-            core_cols = ["CASE_ID", "GROUP_Basename", "Processing_Status", "CLASSIFIED_Type", "CLASSIFICATION_Confidence", "CLASSIFICATION_Reasoning"]
             ordered_cols = [col for col in EXCEL_COLUMN_ORDER if col in existing_cols]
-            remaining_cols = sorted([col for col in existing_cols if col not in ordered_cols and col not in core_cols])
-            df = df[core_cols + ordered_cols + remaining_cols]
+            remaining_cols = sorted([col for col in existing_cols if col not in ordered_cols])
+            final_cols = ordered_cols + remaining_cols
+            df = df[final_cols]
 
         try:
             log.info(f"Saving aggregated data to Excel: {output_excel_path}")

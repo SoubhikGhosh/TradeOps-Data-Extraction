@@ -45,6 +45,14 @@ LOG_LEVEL = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 # --- Column Order Configuration ---
 EXCEL_COLUMN_ORDER = [
+    # === Core fields ===
+    "CASE_ID", 
+    "GROUP_Basename", 
+    "Processing_Status", 
+    "CLASSIFIED_Type", 
+    "CLASSIFICATION_Confidence", 
+    "CLASSIFICATION_Reasoning",
+
     # === Fields for CRL ===
     "CRL_APPLICANT NAME_Value",
     "CRL_APPLICANT ADDRESS_Value",
