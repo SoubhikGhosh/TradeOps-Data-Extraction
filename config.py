@@ -713,33 +713,36 @@ DOCUMENT_FIELDS = {
         {
         "name": "TYPE OF GOODS",
         "description": """
-        **You are an expert data extraction system. Your task is to determine the Type of Goods by analyzing a specific sentence and any associated markings.**
+        **You are an expert data extraction system. Your task is to determine the Type of Goods by applying a strict, hierarchical set of rules to a specific sentence.**
 
-        **Objective:** Accurately determine if the goods are 'Raw Material' or 'Capital Goods' based on a strict set of rules.
+        **Objective:** Accurately determine if the goods are 'Raw Material' or 'Capital Goods'.
 
-        **Guidance for Extraction:**
+        **Guidance for Extraction - Decision Logic:**
 
-        1.  **Primary Location and Context:**
-            * Locate the specific sentence situated below the letterhead that reads: **""We wish to make an advance/direct payment towards import of XXXX (Good/services) as part of our Raw Material / Capital Goods requirements""** or very similar wording.
-            * **Important:** Ignore the specific goods mentioned in the ""XXXX"" part (e.g., ""TILES""). Your focus is ONLY on the ""Raw Material / Capital Goods"" phrase at the end of the sentence.
+        1.  **Locate the Anchor Sentence:**
+            * Find the sentence that reads: **"We wish to make an advance/direct payment towards import of XXXX (Good/services) as part of our Raw Material / Capital Goods requirements"** or similar wording.
+            * The options to consider are only 'Raw Material' and 'Capital Goods'.
 
-        2.  **Noise Handling:**
-            * Be aware that this section of the document may have stamps or other markings that create OCR noise. Read the text carefully through the potential noise.
+        2.  **Primary Rule: Check for a Cutout:**
+            * First, inspect both options ('Raw Material', 'Capital Goods') to see if one is cut out or struck through.
+            * If one option is struck out, the **other option** is ALWAYS the selected one.
 
-        3.  **Decision Logic (Strict Rules):**
-            * The final output MUST be one of two values: **""Raw Material""** or **""Capital Goods""**.
-            * **Rule 1 (Ticks/Marks):** Look for a checkmark, tick (✓), 'X', or similar mark. If a mark is placed on or clearly associated with either ""Raw Material"" or ""Capital Goods"", select that option.
-            * **Rule 2 (Cross-outs):** Look for words that are struck through or crossed out. If one of the options (""Raw Material"" or ""Capital Goods"") is crossed out, you MUST select the other one that is NOT crossed out.
-            * **Rule 3 (Default):** If there are NO ticks, marks, or cross-outs indicating a clear choice, you MUST default the output to **""Raw Material""**.
+        3.  **Secondary Rule: Check for Positive Marks:**
+            * If and only if NEITHER option is cut out, look for a positive selection mark on or near an option.
+            * **Positive Selection Marks:** A tick mark (✓), 'X', star (*), or dot (•).
+            * The option associated with the mark is the selected one.
 
-        **Examples of Logic:**
-        * **Source Text:** ""...as part of our [✓] Raw Material / [ ] Capital Goods..."" -> **Extract ""Raw Material""**
-        * **Source Text:** ""...as part of our Raw Material / ~~Capital Goods~~..."" -> **Extract ""Raw Material""**
-        * **Source Text:** ""...as part of our Raw Material / Capital Goods..."" (no marks) -> **Extract ""Raw Material""** (applying the default rule).
+        4.  **Default Rule:**
+            * If no selection can be made from the rules above (no cutout and no positive marks), you MUST default the output to **"Raw Material"**.
+
+        **Examples of the Full Logic:**
+        * **Source (Cutout Rule):** `...as part of our Raw Material / ~~Capital Goods~~...` -> **Extract "Raw Material"**.
+        * **Source (Positive Mark Rule):** `...as part of our [✓] Raw Material / [ ] Capital Goods...` -> **Extract "Raw Material"**.
+        * **Source (Default Rule):** `...as part of our Raw Material / Capital Goods...` (no marks) -> **Extract "Raw Material"**.
 
         **Output Requirements:**
-        * **Format:** Return the determined type as a **string** (""Raw Material"" or ""Capital Goods"").
-        * **If Not Found:** If the anchor sentence itself cannot be found, return **None**.
+        * **Format:** Return the determined type as a **string** ("Raw Material" or "Capital Goods").
+        * **If Not Found:** If the anchor sentence itself cannot be found, return **null**.
         """
         },
         {
