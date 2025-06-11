@@ -1807,9 +1807,9 @@ DOCUMENT_FIELDS = {
         {
         "name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE",
         "description": """
-        **You are an expert data extraction system. Your primary task is to extract the Beneficiary Bank's SWIFT/BIC code, ensuring it strictly conforms to international standards.**
+        **You are an expert data extraction system. Your primary task is to extract and normalize the Beneficiary Bank's SWIFT/BIC code, ensuring it strictly conforms to international standards.**
 
-        **Objective:** Accurately locate, validate, repair, and extract the bank's SWIFT/BIC code based on the ISO 9362 standard. If a SWIFT/BIC code is unequivocally absent, extract another valid bank identifier as a fallback.
+        **Objective:** Accurately locate, validate, repair, and normalize the bank's SWIFT/BIC code based on the ISO 9362 standard.
 
         **Guidance for Extraction:**
 
@@ -1818,32 +1818,36 @@ DOCUMENT_FIELDS = {
             * Look for labels such as `SWIFT Code:`, `BIC Code:`, `SWIFT/BIC:`, or `SWIFT:`.
 
         2.  **Mandatory Validation Rule: ISO 9362 Standard**
-            * Any extracted SWIFT/BIC code **MUST** be validated against the formal ISO 9362 structure. Use this standard to guide extraction and repair.
+            * Any extracted SWIFT/BIC code **MUST** be validated against the formal ISO 9362 structure.
             * **Structure:** `AAAABBCCDDD`
-                * `AAAA`: **4 letters** (Bank Code). Must be alphabetic.
-                * `BB`: **2 letters** (ISO 3166-1 alpha-2 Country Code). Must be alphabetic.
-                * `CC`: **2 alphanumeric characters** (Location Code). Can be letters or digits.
-                * `DDD`: **3 alphanumeric characters** (Branch Code). This part is optional. If the code is 8 characters, this part is omitted. `XXX` is often used for the primary office.
-            * **Length:** The final code must be exactly **8 or 11 characters**.
+                * `AAAA`: **4 letters** (Bank Code).
+                * `BB`: **2 letters** (Country Code).
+                * `CC`: **2 alphanumeric characters** (Location Code).
+                * `DDD`: **3 alphanumeric characters** (Branch Code, optional).
+            * **Length:** The raw code must be **8 or 11 characters**.
 
         3.  **Data Cleaning and Intelligent Repair:**
-            * **Repair with Confidence:** Use the strict ISO 9362 rules to fix common OCR errors.
-                * *Example 1:* If the OCR reads `BSAB3SBBXXX`, you know the 5th character (Country Code) must be a letter. A logical repair would be `BSABESBBXXX`.
-                * *Example 2:* If the OCR reads `8SABESBBXXX`, you know the first 4 characters (Bank Code) must be letters. A logical repair would be `BSABESBBXXX`.
-            * **Diacritic Conversion:** Convert any characters with diacritics (e.g., é, ñ, ü) to their standard English alphabet equivalents (e.g., e, n, u).
+            * **Repair with Confidence:** Use the strict ISO 9362 rules to fix common OCR errors (e.g., '8' -> 'B', '5' -> 'S').
+                * *Example:* If OCR reads `BSAB3SBB`, recognize the 5th character (Country Code) must be a letter and repair it to `BSABESBB`.
+            * **Diacritic Conversion:** Convert any diacritics (e.g., é, ñ) to standard English letters (e.g., e, n).
 
-        4.  **Fallback Strategy (Only if SWIFT/BIC is Absent):**
-            * If, and only if, you can determine with high certainty that no SWIFT/BIC code is present in the beneficiary bank details, extract the first available valid code from the following list:
-                * 1. **Routing No / ABA:** 9 digits.
-                * 2. **IFSC Code:** 11 alphanumeric characters.
-                * 3. **Sort Code:** 6 digits.
+        4.  **Final Output Formatting and Normalization (New Rule):**
+            * The final output string must contain **only the code itself**, stripped of all labels.
+            * **Length Normalization:**
+                * If the validated code is **8 characters** long, you **MUST append 'XXX'** to the end to create a standard 11-character code.
+                * If the validated code is already **11 characters** long, return it as is.
 
-        5.  **Final Output Formatting:**
-            * The final output string must contain **only the code itself**, stripped of all labels, prefixes, or descriptions.
+        **Examples of Logic:**
+        * **Source Text:** "SWIFT: DEUTDEFF" -> Validate to `DEUTDEFF` (8 chars) -> Normalize to `DEUTDEFFXXX`
+        * **Source Text:** "BIC Code: NWBKGB2LXXX" -> Validate to `NWBKGB2LXXX` (11 chars) -> Return `NWBKGB2LXXX`
+        * **Source Text:** "SWIFT: BSABESBBXXX" -> Validate to `BSABESBBXXX` (11 chars) -> Return `BSABESBBXXX`
+
+        5.  **Fallback Strategy:**
+            * If, and only if, you can determine with high certainty that no SWIFT/BIC code is present, extract another valid bank identifier (e.g., IFSC, ABA). Do not apply normalization rules to these fallback codes.
 
         **Output Requirements:**
-        * **Format:** Return the cleaned, validated, and repaired code as a **single string**.
-        * **If Not Found:** If no valid bank identifier can be found after applying all rules, return **None**.
+        * **Format:** Return the cleaned, validated, and normalized SWIFT/BIC code as a **single string** of 11 characters.
+        * **If Not Found:** If no valid bank identifier can be found after applying all rules, return **null**.
         """
         },
         {
