@@ -875,35 +875,41 @@ DOCUMENT_FIELDS = {
         """
         },
         {
-            "name": "FB CHARGES",
-            "description": """
-    **You are an expert data extraction system. Your task is to extract who bears the Foreign Bank Charges from the document.**
+        "name": "FB CHARGES",
+        "description": """
+        **You are an expert data extraction system. Your task is to extract who bears the Foreign Bank Charges by applying a strict set of rules.**
 
-    **Objective:** Accurately locate and extract the instruction indicating who is responsible for paying foreign bank charges. This is typically represented by a one-letter code: O (Beneficiary), or U (Applicant). 
+        **Objective:** Accurately determine who is responsible for foreign bank charges and represent the choice as a one-letter code: 'O' (Beneficiary) or 'U' (Applicant/Remitter).
 
-    **Guidance for Extraction:**
-    1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'Foreign Bank Charges:', 'Details of Charges:', 'Charges Borne By:', 'Bank Charges:'.
-        * **Location:** Often found in a section related to payment details or charges.
-        * **Content:** The value is usually one of 'U', or 'B'. Sometimes options are presented with checkboxes or one is circled.
-            * **U:** Beneficiary pays all charges (foreign bank charges deducted from remittance).
-            * **O:** Applicant/Remitter pays all charges (beneficiary receives full amount).
-            * **In case neither is ticked:** The default value remains 'U'.
-    2.  **What to Extract:**
-        * Extract the specific code (U, O) or word indicating the responsible party.
-        * If options are given (e.g., checkboxes for "on us", "on beneficiary"), determine which is selected. "on us" generally maps to U, "on beneficiary" to O.
+        **Guidance for Extraction - Decision Logic:**
 
-    **Examples of FB Charges text:**
-    * "Foreign Bank Charges: BEN" (Extract "O")
-    * "Details of Charges: OUR" (Extract "U")
-    * A checkbox next to "OUR" is marked. (Extract "U")
-    * A checkbox next to "on us" is marked. (Extract "U")
-    * "Charges: ()on us (X)on beneficiary" (Extract "O" as 'on beneficiary' is selected)
+        1.  **Locate Options:** First, find the section for "Foreign Bank Charges" and identify the options, such as 'on us', 'on beneficiary', 'OUR', or 'BEN'.
 
-    **Output Requirements:**
-    * **Format:** Return the extracted code/term as a **string** (e.g., "O", "U").
-    * **If Not Found:** If the instruction for foreign bank charges cannot be clearly identified, return **"U"**.
-    """,
+        2.  **Primary Rule: Check for a Cutout:**
+            * Inspect both options to see if one is cut out or struck through.
+            * If one option is struck out, the **other option** is ALWAYS the selected one. Proceed to Step 5 (Map to Code).
+
+        3.  **Secondary Rule: Check for Positive Marks:**
+            * If and only if NEITHER option is cut out, look for a positive selection mark next to an option.
+            * **Positive Selection Marks:** A tick mark (✓), 'X', star (*), or dot (•).
+            * The option associated with the mark is the selected one. Proceed to Step 5 (Map to Code).
+
+        4.  **Default Rule:**
+            * If no selection can be made from the rules above (no cutout and no positive marks), the default selection is 'on us' or 'OUR'.
+
+        5.  **Map to Code:** After determining the selected text, convert it to the final one-letter code:
+            * **'on us'** or **'OUR'** -> maps to **'U'**
+            * **'on beneficiary'** or **'BEN'** -> maps to **'O'**
+
+        **Examples of the Full Logic:**
+        * **Source (Cutout Rule):** `Charges: ~~on us~~ () on beneficiary` -> 'on beneficiary' is selected -> **Extract 'O'**.
+        * **Source (Positive Mark Rule):** `Charges: () on us ☑ on beneficiary` -> 'on beneficiary' is selected -> **Extract 'O'**.
+        * **Source (Default Rule):** `Charges: () on us () on beneficiary` -> 'on us' is the default -> **Extract 'U'**.
+
+        **Output Requirements:**
+        * **Format:** Return the final code as a **string** ('O' or 'U').
+        * **If Section is Not Found:** If the entire "Foreign Bank Charges" section is missing from the document, return **null**.
+        """
         },
         {
         "name": "INTERMEDIARY BANK NAME",
