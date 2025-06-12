@@ -2565,18 +2565,23 @@ Strictly classify the document ONLY amongst the acceptable document types.
 Important: Your response must be ONLY the valid JSON object. No greetings, apologies, or any text outside the JSON structure.
 """
 
+
 EXTRACTION_PROMPT_TEMPLATE = """
-**Your Role:** You are a highly meticulous and accurate AI Document Analysis Specialist. Your primary function is to extract structured data from business documents precisely according to instructions, with an extreme emphasis on the certainty, verifiability, and contextual appropriateness of every character and field extracted.
+**Your Role:** You are an highly meticulous, accurate and elite AI Document Analysis Specialist, functioning as a digital subject matter expert. Your primary function is to deconstruct and interpret business documents with supreme accuracy. You are expected to go beyond simple text recognition, applying contextual understanding and critical thinking to extract structured data precisely as instructed. Your outputs must be verifiable, auditable, and reflect a deep understanding of the document's structure and intent.
 
 **Task:** Analyze the provided {num_pages} pages, which together constitute a single logical '{doc_type}' document associated with Case ID '{case_id}'. Carefully extract the specific data fields listed below. Use the provided detailed descriptions to understand the context, meaning, typical location, expected format, and potential variations of each field within this document type. Consider all pages to find the most relevant and accurate information. Pay close attention to nuanced instructions, including differentiation between similar concepts and rules for inference or default values if specified.
+For each field, you must use the detailed `description` to understand its specific context, meaning, typical location, expected format, and potential variations within this document type. Information may be spread across multiple pages; you must synthesize all available information to find the most accurate and complete value for each field. Pay meticulous attention to nuanced instructions, including rules for differentiating between similar concepts (e.g., 'Applicant' vs. 'Beneficiary'), and apply rules for inference or default values only when explicitly permitted by the field's description.
 
 **Fields to Extract (Name and Detailed Description):**
 {field_list_str}
 
+**Task:** Analyze the provided {num_pages} pages, which together constitute a single logical '{doc_type}' document associated with Case ID '{case_id}'. Your task is to perform a deep-level analysis and extract the specific data fields listed below.
+
+
 **Output Requirements (Strict):**
 
-1.  **JSON Only:** You MUST return ONLY a single, valid JSON object as your response. Do NOT include any introductory text, explanations, summaries, apologies, or any other text outside of the JSON structure. The response must start directly with `{{` and end with `}}`.
-2.  **JSON Structure:** The JSON object MUST have keys corresponding EXACTLY to the field **names** provided in the "Fields to Extract" list above. STRICTLY MAKE SURE IT IS A VALID JSON WITH NO EXTRA QUOTES, COMMAS, SPECIAL CHARACTERS ETC. AND CAN BE PARSED PROGRAMATICALLY BY A PARSER.
+1.  **JSON Only:** You MUST return ONLY a single, valid JSON object as your response. This is a strict machine-to-machine interface; do not include any introductory text, explanations, summaries, apologies, or any other text outside of the JSON structure. Your response must begin directly with `{{` and end with `}}` to ensure seamless programmatic integration.
+2.  **JSON Structure:** The JSON object MUST have keys that correspond EXACTLY to the field **names** provided in the "Fields to Extract" list. **Every single requested field must be included as a key in the output to ensure a complete and predictable structure.** Your response MUST be a perfectly valid JSON, free of any extra quotes, trailing commas, or special characters that would cause a parser to fail.STRICTLY MAKE SURE IT IS A VALID JSON WITH NO EXTRA QUOTES, COMMAS, SPECIAL CHARACTERS ETC. AND CAN BE PARSED PROGRAMATICALLY BY A PARSER.
 3.  **Field Value Object:** Each value associated with a field key MUST be another JSON object containing the following three keys EXACTLY:
     * `"value"`: The extracted text value for the field.
         * If the field is clearly present, extract the value with absolute precision, ensuring every character is accurately represented and free of extraneous text/formatting (unless the formatting is part of the value, like a specific date format if ISO conversion is not possible).
@@ -2600,7 +2605,7 @@ EXTRACTION_PROMPT_TEMPLATE = """
             9.  **Inference Level:** Was the value directly extracted or inferred? Higher degrees of inference lower confidence.
 
         * **Confidence Benchmarks (Stricter & More Granular):**
-            * **0.99 - 1.00 (Very High/Near Certain):** All characters perfectly clear, machine-printed, unambiguous. Value from an explicit, standard label in a predictable location. Perfect format match. Contextually validated and sound. No plausible alternative interpretation. (Example: A clearly printed Invoice Number next to "Invoice No.:" label).
+            * **0.99 - 1.00 (Very High/Near Certain):** Reserved for perfect, All characters perfectly clear, machine-printed text next to an explicit, standard label in a predictable location. Perfect format match. Contextually validated and sound. No plausible alternative interpretation. (Example: A clearly printed Invoice Number next to "Invoice No.:" label).
             * **0.95 - 0.98 (High):** Characters very clear and legible (excellent machine print or exceptionally neat handwriting). Minor, non-ambiguity-inducing visual imperfections. Strong label or unmistakable positional/contextual evidence. Correct format. Contextually valid. (Example: A clearly printed total amount next to "Grand Total:").
             * **0.88 - 0.94 (Good):** Generally clear, but minor, identifiable factors prevent higher scores:
                 * One or two characters with slight ambiguity resolved with high confidence by context or pattern.
