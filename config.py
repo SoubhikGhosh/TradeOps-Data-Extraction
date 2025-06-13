@@ -481,40 +481,36 @@ DOCUMENT_FIELDS = {
     * **Completeness:** Ensure all components of the address (street, city, country, etc.) visible are extracted.
     """,
         },
-        {
-            "name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE",
-            "description": """
-    **You are an expert data extraction system. Your task is to extract the Beneficiary Bank's identification code from the document.**
+       {
+        "name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE",
+        "description": """
+        **You are an expert data extraction system. Your task is to extract the Beneficiary Bank's 11-character SWIFT code from the document, handling potential diacritics. If an 8-character code is found, pad it with 'XXX'. If no SWIFT code is found, extract other relevant bank identifiers.**
 
-    **Objective:** Accurately locate and extract the unique identification code of the beneficiary's bank or bank branch. This code can be a SWIFT/BIC code, Sort Code, BSB number, IFSC code, or a similar bank identifier (e.g., ABA for US routing).
+        **Objective:** Accurately locate and return an 11-character alphanumeric string representing the Beneficiary Bank's SWIFT/BIC code.  Handle diacritics by converting them to their closest English alphabet equivalent. If a valid 11-character SWIFT code (after diacritic conversion) is not found, extract other bank identifiers (IFSC, Sort Code, BSB, ABA) and indicate the type of code extracted.
 
-    **Guidance for Extraction:**
-    1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'SWIFT Code:', 'BIC Code:', 'SWIFT/BIC:', 'Beneficiary Bank SWIFT:', 'Bank Code:', 'IFSC:', 'IFSC Code:', 'Sort Code:', 'BSB Number:', 'Routing No:', 'ABA:', 'Fedwire:', 'Chips UID:'. These labels are typically found near the beneficiary bank's name and address.
-        * **Format:**
-            * **SWIFT/BIC codes** are typically 8 or 11 characters long, alphanumeric (e.g., BANKGB2LXXX, DEUTDEFF).
-            * **IFSC codes** (Indian Financial System Code) are 11 characters, alphanumeric, with the fifth character usually being '0' (e.g., HDFC0000123).
-            * **Sort Codes** (UK & Ireland) are typically 6 digits, often formatted as XX-XX-XX (e.g., 12-34-56).
-            * **BSB Numbers** (Australia) are 6 digits, often formatted as XXX-XXX (e.g., 012-345).
-            * **Routing Numbers/ABA Numbers** (USA) are 9 digits.
-        * **Context:** This information is usually located in the 'Beneficiary Bank Details' section, alongside the beneficiary bank's name and account number.
-    2.  **What to Extract:**
-        * Extract the **complete and exact code** as it appears.
-        * If multiple types of codes are present for the beneficiary bank (e.g., both a SWIFT code and a local clearing code), prioritize the SWIFT/BIC code if available. If not, extract the available code. If the specific type of code is ambiguous but clearly a bank identifier, extract it.
-        * Remove any prefixes or descriptive text that are not part of the code itself (e.g., if "SWIFT Code: BANKGB2LXXX" is found, extract "BANKGB2LXXX").
+        **Guidance for Extraction:**
 
-    **Examples of codes:**
-    * SWIFT/BIC: "BANKGB2LXXX", "DEUTDEFFXXX", "BKCHCNBJ500"
-    * IFSC: "BKID0001234"
-    * Sort Code: "20-30-40"
-    * BSB: "062-000"
-    * Routing No: "123456789"
+        1. **Priority: SWIFT Code:** First, search for a SWIFT/BIC code. Look for labels such as 'SWIFT Code:', 'BIC Code:', 'SWIFT/BIC:', 'Beneficiary Bank SWIFT:'. The code will be 8 or 11 characters.  If an 8-character code is found, append 'XXX' to reach 11 characters.
 
-    **Output Requirements:**
-    * **Format:** Return the extracted code as a **single string**.
-    * **If Not Found:** If no such bank identification code for the beneficiary bank can be found, return **null**.
-    * **Preference:** If both a SWIFT/BIC and another local code (IFSC, Sort Code, BSB, ABA) are clearly listed for the beneficiary bank, and no other instruction specifies which to take, prefer the SWIFT/BIC. If only one type is present, extract that.
-    """,
+        2. **Diacritic Conversion:** If the extracted SWIFT code contains diacritics (e.g., accents), convert them to their closest English alphabet equivalent (e.g., 'é' to 'e', 'ü' to 'u').  Use a simple, character-by-character substitution. Do not use advanced transliteration techniques.
+
+        3. **Validation:** After diacritic conversion, validate that the result is an 11-character alphanumeric string. If not, proceed to step 4.
+
+        4. **Alternative Identifiers:** If no valid SWIFT code is found after diacritic conversion, search for alternative bank identifiers: IFSC, Sort Code, BSB Number, Routing Number/ABA Number. Use the same labeling conventions and format validations as in the previous prompt (see previous prompt for details). Choose the first valid identifier found.
+
+        5. **Format and Validation:** After extraction, validate the length and character type (alphanumeric for SWIFT/BIC, numeric for others). If the extracted identifier is invalid for its respective type, return "null".
+
+        6. **What to Extract:** Return an 11-character alphanumeric string if a SWIFT code is found (padded and converted as necessary). Otherwise, return the first valid alternative identifier found (IFSC, Sort Code, BSB, ABA), including the type of code (e.g., "IFSC: HDFC0000123").
+
+        7. **Output Format:** If a valid 11-character SWIFT code (after diacritic conversion) is found, return the code as a string. If no valid SWIFT code is found, return the first valid alternative identifier and its type. If no valid code of any type is found, return "null".
+
+        **Examples:**
+            * "SWIFT Code: BKCHCNBjø" -> "BKCHCNBJXXX" (diacritic removed and padded to 11 characters)
+            * "IFSC: HDFC0000123"
+            * "Sort Code: 203040"
+
+        **Output Requirements:** Return an 11-character alphanumeric string (SWIFT code) if found (after diacritic conversion and padding). Otherwise, return the type and value of the first valid alternative code found. If no valid code is found, return "null".
+        """
         },
         {
             "name": "STANDARD DECLARATIONS AS PER PRODUCTS",
@@ -588,100 +584,88 @@ DOCUMENT_FIELDS = {
         {
         "name": "APPLICANT NAME",
         "description": """
-        **You are an expert data extraction system. Your task is to extract the Applicant Name from a specific table within the document.**
+        **You are an expert data extraction system. Your task is to extract the Applicant's Name from the table immediately following the sentence beginning with 'We wish to make an advance/direct payment' within the provided document. Do not extract from the letterhead.**
 
-        **Objective:** Accurately locate and extract the full legal name of the applicant from the designated table field, ignoring all other potential sources.
+        **Objective:** Accurately extract the full legal name of the applicant, including any details like 'c/o' or 's/o', from the specified table.  Handle variations in table structure.
 
         **Guidance for Extraction:**
 
-        1.  **Contextual Anchor - Locating the Correct Table:**
-            * First, locate the introductory sentence that reads: **""We wish to make an advance/direct payment towards import of...""** or similar wording.
-            * The applicant's details are located in a table immediately following this sentence.
+        1. **Locate the Introductory Sentence:** Identify the sentence beginning with 'We wish to make an advance/direct payment' or similar wording indicating a payment request for imported goods. This sentence marks the beginning of the relevant section.
 
-        2.  **Primary Source for Extraction (Strict Rule):**
-            * You **MUST** extract the information from the table identified above.
-            * Specifically, find the table row with the label **'Name & Address of the Customer'**. The applicant's name is the first part of the value in the adjacent cell.
+        2. **Identify the Target Table:** The applicant's name and address are located in the table immediately following this introductory sentence. This table may have various column headers; look for a column containing the applicant's identification.
 
-        3.  **Exclusion Rules (Crucial):**
-            * **STRICTLY DO NOT** extract the name from the letterhead at the top of the document. The only valid source is the specified table.
+        3. **Extract the Name:** Locate the cell containing the applicant's identifying information (this could be labeled 'Name & Address of the Customer', 'Customer Name', etc.). Extract the name portion *before* any address information begins, typically a comma or similar separator. Include all parts of the name, including any 'c/o [Name]' or 's/o [Name]' details.
 
-        4.  **What to Extract:**
-            * From the value associated with 'Name & Address of the Customer', extract **only the applicant's name**.
-            * The name often ends with a legal suffix (like Pvt. Ltd.) and is followed by the address.
-            * **Important:** If the name includes additional details like ""c/o [Name]"" or ""s/o [Name]"", you **MUST** include this as part of the full applicant name.
-            * Extract the full name exactly as it appears, including all suffixes, punctuation, and details like ""c/o"".
+        4. **Strict Exclusion Rule:** Do *not* extract the applicant's name from the letterhead at the top of the document. Only extract from the specified table.
 
-        **Example based on the document:**
-        * **Source Text in Table Cell:** ""Grescasa India Private Limited. 5- E. Laxmi Industrial Estate...""
-        * **Correct Extraction:** ""Grescasa India Private Limited.""
+        5. **Handling Variations:** The table might not have explicit headers. In this case, prioritize the first cell in the row following the introductory sentence if it contains a name followed by an address.
 
-        **Example with additional details:**
-        * **Source Text:** ""John Doe s/o Richard Roe, 123 Main St...""
-        * **Correct Extraction:** ""John Doe s/o Richard Roe""
+        **What to Extract:** The complete applicant name, as it appears in the table, including any prefixes or suffixes.
+
+        **Example:**
+        * **Table Cell Content:** "SPIMpex, No-44,Nathamuni Street..."
+        * **Correct Extraction:** "SPIMpex"
 
         **Output Requirements:**
-        * **Format:** Return the extracted name as a **string**.
-        * **If Not Found:** If the name cannot be found *in the specified table location*, return **None**.
+        * **Format:** Return the extracted name as a single string.
+        * **If Not Found:** If the name cannot be found in the specified table, return "null".
+        * **If Ambiguous:** If multiple names are found, return "null".
         """
         },
         {
         "name": "APPLICANT ADDRESS",
         "description": """
-        **You are an expert data extraction system. Your task is to extract the Applicant's Address from the document.**
+        **You are an expert data extraction system. Your task is to extract the Applicant's Address from the table immediately following the sentence beginning with 'We wish to make an advance/direct payment' within the provided document. Do not extract from the letterhead.**
 
-        **Objective:** Accurately locate and extract the complete mailing address of the applicant from the designated table field, ensuring the applicant's name is excluded.
+        **Objective:** Accurately extract the complete mailing address of the applicant from the specified table. Handle variations in table structure.
 
         **Guidance for Extraction:**
 
-        1.  **Primary Source for Extraction:**
-            * You **MUST** extract the information from the **tabular data structure** only.
-            * Specifically, find the table row with the label **'Name & Address of the Customer'**. The address is the part of the value that follows the company name.
+        1. **Locate the Introductory Sentence:** Identify the sentence beginning with 'We wish to make an advance/direct payment' or similar wording.
 
-        2.  **Exclusion Rules (Crucial):**
-            * **STRICTLY DO NOT** extract the address from the letterhead at the top of the document.
-            * **STRICTLY DO NOT** include the Applicant's Name (e.g., ""Grescasa India Private Limited."") in the extracted address string.
+        2. **Identify the Target Table:** The applicant's name and address are in the table immediately following this sentence.
 
-        3.  **What to Extract:**
-            * From the value associated with 'Name & Address of the Customer', extract **only the address part**.
-            * Preserve the address exactly as it is written, including all punctuation (dots, commas, hyphens) and spacing.
+        3. **Extract the Address:** From the same row containing the applicant's name, extract the address portion following the name and any separators (e.g., comma).
 
-        **Example based on the document:**
-        * **Source Text in Table Cell:** ""Grescasa India Private Limited. 5- E. Laxmi Industrial Estate, New Link Road, Andheri (W), Mumbai 400 053"" 
-        * **Correct Extraction:** ""5- E. Laxmi Industrial Estate, New Link Road, Andheri (W), Mumbai 400 053""
+        4. **Strict Exclusion Rule:** Do *not* extract the address from the letterhead or any section outside the specified table.
+
+        5. **Exclusion of Name:** Do not include the applicant's name in the extracted address.
+
+        6. **Handling Variations:** The address might be split across multiple cells. If so, concatenate them into a single string.  The address may end at the end of the table row, or at a clear separator before subsequent information.
+
+        **What to Extract:** The complete address, as it appears in the table, excluding the applicant's name.
+
+        **Example:**
+        * **Table Cell Content:** "SPIMpex, No-44,Nathamuni Street,Oragadam,Ambattur,Chennai-600053"
+        * **Correct Extraction:** "No-44,Nathamuni Street,Oragadam,Ambattur,Chennai-600053"
 
         **Output Requirements:**
-        * **Format:** Return the extracted address as a **single string**.
-        * **If Not Found:** If the address cannot be found *in the specified table location*, return **None**.
+        * **Format:** Return the extracted address as a single string.
+        * **If Not Found:** If the address cannot be found in the specified table, return "null".
+        * **If Ambiguous:** If multiple addresses are found, return "null".
         """
         },
         {
-            "name": "APPLICANT COUNTRY",
-            "description": """
-    **You are an expert data extraction system. Your task is to extract the Applicant Country from the document.**
+        "name": "APPLICANT COUNTRY",
+        "description": """
+        **You are an expert data extraction system. Your task is to extract the Applicant Country from the document, returning the result as an ISO 3166-1 alpha-2 country code.**
 
-    **Objective:** Accurately locate and extract the country where the applicant (customer) is officially located or registered.
+        **Objective:** Accurately determine and return the two-letter ISO 3166-1 alpha-2 country code for the applicant's location.
 
-    **Guidance for Extraction:**
-    1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'Country:', 'Applicant Country:'.
-        * **Location:**
-            * Often found as the last part of the applicant's full address.
-            * May be on a separate line near the address or in a dedicated 'Country' field within applicant details.
-            * May not be explicitly mentioned as well, in which we need to make the obvious guess from the address.
-        * **Context:** This should be the country associated with the applicant's main address.
-    2.  **What to Extract:**
-        * Extract the name of country and return it as the country code for that country.
-        * Avoid extracting city or state names as the country.
+        **Guidance for Extraction:**
 
-    **Examples of Applicant Country text:**
-    * "IN"
-    * "UK"
+        1. **Direct Identification:** First, look for labels such as 'Country:', 'Applicant Country:', or similar, within the applicant's details. If found, and the country name is explicitly provided, convert the country name to its corresponding ISO 3166-1 alpha-2 code (e.g., "India" -> "IN", "United Kingdom" -> "GB", "United States" -> "US").
 
-    **Output Requirements:**
-    * **Format:** Return the extracted country name as a **string**.
-    * **If Not Found:** If the Applicant Country cannot be clearly identified or is absent, return **null**.
-    * **Standardization (Optional):** If possible, standardize to common country codes. If unsure, extract as written.
-    """,
+        2. **Inference from Address:** If a dedicated 'Country' field is absent, infer the country from the applicant's address. Look for typical country indicators (e.g., postal codes, city names strongly associated with a specific country).  If a country can be reliably inferred from the address, convert the country name to its ISO 3166-1 alpha-2 code.
+
+        3. **Ambiguity Resolution:** If multiple potential countries are identified from the address, return "null" to avoid ambiguity.
+
+        4. **Unknown Country:** If the applicant's country cannot be determined from either explicit labeling or address inference, return "null".
+
+        **Output Requirements:**
+        * **Format:** Return the applicant's country as its ISO 3166-1 alpha-2 code (a two-letter string, uppercase).
+        * **If Not Found:** Return "null".
+        """
         },
         {
             "name": "HS CODE",
@@ -713,168 +697,166 @@ DOCUMENT_FIELDS = {
         {
         "name": "TYPE OF GOODS",
         "description": """
-        **You are an expert data extraction system. Your task is to determine the Type of Goods by applying a strict, hierarchical set of rules to a specific sentence.**
+        **You are an expert data extraction system. Your task is to determine the Type of Goods ('Raw Material' or 'Capital Goods') from the sentence following the letterhead, handling potential noise from stamps or markings.**
 
-        **Objective:** Accurately determine if the goods are 'Raw Material' or 'Capital Goods'.
+        **Objective:** Accurately determine whether the goods are classified as 'Raw Material' or 'Capital Goods'.
 
         **Guidance for Extraction - Decision Logic:**
 
-        1.  **Locate the Anchor Sentence:**
-            * Find the sentence that reads: **"We wish to make an advance/direct payment towards import of XXXX (Good/services) as part of our Raw Material / Capital Goods requirements"** or similar wording.
-            * The options to consider are only 'Raw Material' and 'Capital Goods'.
+        1. **Locate the Anchor Sentence:** Find the sentence containing "We wish to make an advance/direct payment towards import of XXXX (Goods/services) as part of our Raw Material/Capital Goods requirements" or similar wording.  This sentence will be located below the letterhead.
 
-        2.  **Primary Rule: Check for a Cutout:**
-            * First, inspect both options ('Raw Material', 'Capital Goods') to see if one is cut out or struck through.
-            * If one option is struck out, the **other option** is ALWAYS the selected one.
+        2. **Handle Noise:** The sentence might contain stamps or other markings.  Ignore these extraneous markings when determining the type of goods.  Focus on the textual content of 'Raw Material' and 'Capital Goods'.
 
-        3.  **Secondary Rule: Check for Positive Marks:**
-            * If and only if NEITHER option is cut out, look for a positive selection mark on or near an option.
-            * **Positive Selection Marks:** A tick mark (✓), 'X', star (*), or dot (•).
-            * The option associated with the mark is the selected one.
+        3. **Primary Rule: Check for Strikethroughs:** Examine both 'Raw Material' and 'Capital Goods'. If one is struck through or clearly marked as not selected, the other option is selected.
 
-        4.  **Default Rule:**
-            * If no selection can be made from the rules above (no cutout and no positive marks), you MUST default the output to **"Raw Material"**.
+        4. **Secondary Rule: Check for Positive Marks:** If neither option is struck through, look for positive selection marks (✓, X, *, •) directly above or adjacent to either 'Raw Material' or 'Capital Goods'. The option with a positive mark is selected.
 
-        **Examples of the Full Logic:**
-        * **Source (Cutout Rule):** `...as part of our Raw Material / ~~Capital Goods~~...` -> **Extract "Raw Material"**.
-        * **Source (Positive Mark Rule):** `...as part of our [✓] Raw Material / [ ] Capital Goods...` -> **Extract "Raw Material"**.
-        * **Source (Default Rule):** `...as part of our Raw Material / Capital Goods...` (no marks) -> **Extract "Raw Material"**.
+        5. **Default Rule:** If no strikethroughs or positive marks are found, default to 'Raw Material'.
+
+        6. **Strict Options:** Only 'Raw Material' or 'Capital Goods' are valid outputs.
+
+        **Examples:**
+            * "...as part of our Raw Material/~~Capital Goods~~..." -> "Raw Material" (Capital Goods is struck through)
+            * "...as part of our [✓]Raw Material/Capital Goods..." -> "Raw Material" (Positive mark on Raw Material)
+            * "...as part of our Raw Material/Capital Goods..." -> "Raw Material" (Default rule)
 
         **Output Requirements:**
-        * **Format:** Return the determined type as a **string** ("Raw Material" or "Capital Goods").
-        * **If Not Found:** If the anchor sentence itself cannot be found, return **null**.
+            * **Format:** Return the determined type as a string ("Raw Material" or "Capital Goods").
+            * **If Not Found:** If the anchor sentence cannot be found, return "null".
         """
         },
-        {
+       {
         "name": "DEBIT ACCOUNT NO",
         "description": """
-        **You are an expert data extraction system. Your task is to extract the Applicant's primary Debit Account Number with maximum precision.**
+        **You are an expert data extraction system. Your task is to extract the Applicant's primary Debit Account Number, validating it against international bank account number (IBAN) standards and verifying the number of digits.**
 
-        **Objective:** Accurately locate and extract the bank account number from which the principal transaction funds will be debited.
+        **Objective:** Accurately locate and extract the bank account number from which the principal transaction funds will be debited, ensuring the extracted number meets IBAN standards and has a plausible digit count.
 
         **Guidance for Extraction:**
 
-        1.  **Identification Cues:**
-            * **Primary Labels:** Look for labels like 'Account to be debited as applicable', 'Debit Account No.:', or 'Account to be Debited:'.
-            * **Prefix:** The account number is often preceded by 'INR A/C No:'.
-            * **Location:** Find this in the payment instruction table, associated with the applicant/customer.
-            * **Context:** This is the source account for the main remittance amount, not for bank charges.
+        1. **Identification Cues:** Look for labels like 'Account to be debited as applicable', 'Debit Account No.:', 'Account to be Debited:', or similar terms.  The account number is often preceded by 'INR A/C No:', 'A/C No:', or similar prefixes.  Locate this within the payment instruction table, associated with the applicant/customer. This is the source account for the main remittance amount, not for bank charges.
 
-        2.  **CRITICAL: High-Fidelity Digit Extraction**
-            * **You MUST capture every single digit exactly as it appears.** The document is scanned, and OCR can be unreliable.
-            * **Pay extreme attention to repeated characters (e.g., '00', '777'). DO NOT collapse them.**
-            * **Example of what NOT to do:** If the source text is ""A/C: 00999123"", the WRONG output is ""09123"". The CORRECT output is ""00999123"".
-            * Before finalizing the output, double-check your work to ensure no digits were missed or incorrectly interpreted.
+        2. **High-Fidelity Digit Extraction:** Capture *every* digit exactly as it appears, including repetitions (e.g., '00', '777'). Do not collapse or modify the sequence of digits.
 
-        3.  **Validation and Plausibility Check:**
-            * **Digit Count:** For Indian bank accounts (like in the example document), the account number length is typically between **9 and 18 digits**. If your extracted number is outside this range, it is likely an error. Re-examine the source.
-            * **Format:** The number should be a sequence of digits. Remove all non-numeric characters, prefixes, or labels (e.g., from ""INR A/C No: 50200030838696"", extract ""50200030838696"").
+        3. **IBAN Validation:** After extracting the digits, check if it conforms to IBAN standards for the relevant country (India in this case).  If it does not, return "null."  Note:  Basic length checks are not sufficient for IBAN validation; consult a relevant IBAN validation library or tool.
+
+        4. **Digit Count Verification:** The number of digits should fall within a plausible range for Indian bank accounts (typically 9-18 digits).  If the digit count is outside this range *after* removing prefixes and suffixes, return "null."
+
+        5. **Format:** The final output should be only the validated sequence of digits (numeric string).
+
+        **Example:**
+        * **Source Text:** "INR A/C No: 50200030838696"
+        * **Correct Extraction:** "50200030838696"  (Assuming this passes IBAN and length checks)
 
         **Output Requirements:**
-        * **Format:** Return the validated account number as a **string**.
-        * **If Not Found:** If the Debit Account Number cannot be identified with high confidence, return **None**.
+        * **Format:** Return the validated account number as a string.
+        * **If Not Found or Invalid:** If the Debit Account Number cannot be identified with high confidence, does not meet IBAN standards, or has an implausible digit count, return "null".
         """
         },
         {
         "name": "FEE ACCOUNT NO",
         "description": """
-        **You are an expert data extraction system. Your task is to extract the Applicant's Fee Account Number with maximum precision.**
+        **You are an expert data extraction system. Your task is to extract the Applicant's Fee Account Number, validating against IBAN standards and verifying the digit count.**
 
-        **Objective:** Accurately locate and extract the bank account number used for HDFC Bank Ltd.'s charges.
+        **Objective:** Accurately locate and extract the bank account number used for HDFC Bank Ltd.'s charges, ensuring the number meets IBAN standards and has a plausible digit count.
 
         **Guidance for Extraction:**
 
-        1.  **Primary Location and Logic:**
-            * First, find the row labeled **""Account to be debited for charges of HDFC Bank Ltd.""**.
-            * If an option like **""on us""** is selected (indicated by a mark or text like ""Won us"") AND an account number is explicitly written next to it, extract that number.
-            * If ""on beneficiary"" is selected, the result is **null**.
-            * As a fallback, if ""on us"" is selected but no specific account number is given, use the main ""DEBIT ACCOUNT NO"".
+        1. **Primary Location and Logic:** Find the row labeled ""Account to be debited for charges of HDFC Bank Ltd."" or similar.
+        2. **"on us" Condition:** If ""on us"" is selected (indicated by a mark or text like ""(YES) on us""), and an account number is explicitly provided, extract that number.
+        3. **"on beneficiary" Condition:** If ""on beneficiary"" is selected, return "null".
+        4. **Fallback Condition:** If ""on us"" is selected but no account number is given, use the main DEBIT ACCOUNT NO (after verifying it against IBAN standards and digit count).
 
-        2.  **CRITICAL: High-Fidelity Digit Extraction**
-            * **You MUST capture every single digit exactly as it appears.** The document is scanned, and OCR can be unreliable.
-            * **Pay extreme attention to repeated characters (e.g., '00', '777'). DO NOT collapse them.**
-            * **Example of what NOT to do:** If the source text is ""a/c no: 44000123"", the WRONG output is ""40123"". The CORRECT output is ""44000123"".
-            * Before finalizing the output, double-check your work to ensure no digits were missed or incorrectly interpreted.
+        5. **High-Fidelity Digit Extraction:** Capture *every* digit exactly as it appears, including repetitions. Do not collapse or modify the sequence of digits.
 
-        3.  **Validation and Plausibility Check:**
-            * **Digit Count:** For Indian bank accounts, the account number length is typically between **9 and 18 digits**. If your extracted number is outside this range, it is likely an error. Re-examine the source.
-            * **Format:** The number should be a sequence of digits. Remove all non-numeric characters, prefixes, or labels.
+        6. **IBAN Validation:** Check if the extracted number conforms to IBAN standards for the relevant country. If not, return "null."
+
+        7. **Digit Count Verification:**  The digit count should be within the plausible range for Indian bank accounts (typically 9-18 digits). If outside this range *after* removing prefixes and suffixes, return "null".
+
+        8. **Format:** The final output should be only the validated sequence of digits (numeric string).
+
+        **Example:**
+        * **Source Text:** "(YES) on us a/c no 1234567890"
+        * **Correct Extraction:** "1234567890" (Assuming this passes IBAN and length checks)
 
         **Output Requirements:**
-        * **Format:** Return the validated account number as a **string**.
-        * **If Not Found:** If no fee account can be determined based on the rules, return **None**.
+        * **Format:** Return the validated account number as a string.
+        * **If Not Found or Invalid:** If no fee account can be determined based on the rules or the number is invalid (fails IBAN or length checks), return "null".
         """
         },
         {
-            "name": "LATEST SHIPMENT DATE",
-            "description": """
-    **You are an expert data extraction system. Your task is to extract the Latest Shipment Date from the document.**
+        "name": "LATEST SHIPMENT DATE",
+        "description": """
+        **You are an expert data extraction system. Your task is to extract the Latest Shipment Date from the document.**
 
-    **Objective:** Accurately locate and extract the latest date by which the goods must be shipped by the exporter/seller, as specified in the document (often related to terms in a Letter of Credit, purchase order, or proforma invoice referenced in the request).
+        **Objective:** Accurately locate and extract the latest date by which the goods must be shipped by the exporter/seller, as specified in the document (often related to terms in a Letter of Credit, purchase order, or proforma invoice referenced in the request).
 
-    **Guidance for Extraction:**
-    1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'Latest Shipment Date:', 'Shipment by:', 'Latest Date of Shipment:', 'LSD:', 'Expected Date of Despatch:'.
-        * **Location:** This date is typically found in sections detailing shipping terms, Letter of Credit conditions, or purchase order specifics.
-        * **Format:** Dates can appear in various formats (e.g., DD-MM-YYYY, MM/DD/YYYY, YYYY-MON-DD).
-    2.  **What to Extract:**
-        * Extract the complete date.
+        **Guidance for Extraction:**
+        1.  **Identification Cues:**
+            * **Labels:** Look for labels such as 'Latest Shipment Date:', 'Shipment by:', 'Latest Date of Shipment:', 'LSD:', 'Expected Date of Despatch:'.
+            * **Location:** This date is typically found in sections detailing shipping terms, Letter of Credit conditions, or purchase order specifics.
+            * **Format:** Dates can appear in various formats (e.g., DD-MM-YYYY, MM/DD/YYYY, YYYY-MON-DD).
+        2.  **What to Extract:**
+            * Extract the complete date.
 
-    **Examples of Latest Shipment Date text:**
-    * "Latest Shipment Date: 31-12-2024"
-    * "Shipment by: 15/01/2025"
-    * "Expected Date of Despatch: 30.05.2005"
+        **Examples of Latest Shipment Date text:**
+        * "Latest Shipment Date: 31-12-2024"
+        * "Shipment by: 15/01/2025"
+        * "Expected Date of Despatch: 30.05.2005"
 
-    **Output Requirements:**
-    * **Format:** Standardize and return the extracted date in **DD-MM-YYYY** format.
-    * **If Not Found:** If the Latest Shipment Date cannot be clearly identified or is absent, return **null**.
-    """,
+        **Output Requirements:**
+        * **Format:** Standardize and return the extracted date in **DD-MM-YYYY** format.
+        * **If Not Found:** If the Latest Shipment Date cannot be clearly identified or is absent, return **null**.
+        """
         },
        {
         "name": "DISPATCH PORT",
         "description": """
-        **You are an expert data extraction system. Your task is to extract the Dispatch Port (also known as Port of Loading) from the document.**
+        **You are an expert data extraction system. Your task is to extract the Dispatch Port (Port of Loading) from the provided multi-page document.**
 
-        **Objective:** Accurately locate and extract the name of the port, airport, or place from where the goods are shipped.
+        **Objective:** Accurately locate and extract the name of the port, airport, or place from where the goods are to be dispatched or shipped (also known as Port of Loading).  Multiple pages may contain relevant information.
 
         **Guidance for Extraction:**
+        1.  **Identification Cues:** Look for labels such as 'Port of Despatch:', 'Port of Dispatch:', 'Port of Loading:', 'From Port:', 'Shipped From:', 'Origin Port:', 'Name of the shipping company / airlines', 'Port of Despatch', etc. Consider variations in spelling and phrasing.
+        2.  **Location:** This information is typically found within sections relating to shipment details, often near proforma invoice information or other transport details.
+        3.  **Content:** This will be a geographical location name (e.g., a city name, specific port name, or a phrase like "ANY SPANISH PORT").
+        4. **Multiple Documents:** The information may reside on one or more of the provided documents.
+        5. **Ambiguity Resolution:** If multiple possible ports are identified, prioritize those with clear labeling or context suggesting a port of origin for the goods.
 
-        1.  **Identification Cues:**
-            * **Primary Labels:** Look for labels such as 'Port of Despatch:', 'Port of Dispatch:', 'Port of Loading:', 'From Port:', 'Shipped From:', 'Origin Port:'.
-            * **Location:** This information is typically in a section related to 'Shipment details'. In this document, it is under the heading ""**Shipment details & Proforma Invoice details mandatory for Advance Import Payment**"". 
-            * **Content:** The value will be a geographical location, which could be a city, a specific port name, or a general phrase like ""ANY SPANISH PORT"".
+        **Examples of Dispatch Port text:**
+        * "Port of Despatch ANY SPANISH PORT" (Extract "ANY SPANISH PORT")
+        * "Port of Loading: Port of Hamburg" (Extract "Port of Hamburg")
+        * "From: Qingdao" (Extract "Qingdao")
 
-        2.  **Flexibility and Error Tolerance:**
-            * **Typos & Variations:** Be aware of potential misspellings or OCR errors. Actively look for variations like 'Port of Dspatch' or 'Port of Despach'.
-            * **Context over Keywords:** If a clear label is missing, use the context. The dispatch port is the origin location in the shipping route.
-
-        3.  **Output Requirements:**
-            * **Format:** Return the extracted port name as a **string**.
-            * **If Not Found:** If the Dispatch Port cannot be clearly identified, return **None**.
-        """
+        **Output Requirements:**
+        * **Format:** Return the extracted port name as a string.
+        * **If Multiple Found:** Return a comma-separated list if multiple ports seem valid and are clearly indicated as points of origin.
+        * **If Not Found:** If the Dispatch Port cannot be clearly identified or is absent, return "null".
+        """,
         },
         {
         "name": "DELIVERY PORT",
         "description": """
-        **You are an expert data extraction system. Your task is to extract the Delivery Port (also known as Port of Discharge or Destination Port) from the document.**
+        **You are an expert data extraction system. Your task is to extract the Destination Port (Port of Discharge) from the provided multi-page document.**
 
-        **Objective:** Accurately locate and extract the name of the port, airport, or place where the goods are to be delivered.
+        **Objective:** Accurately locate and extract the name of the port, airport, or place where the goods are to be delivered in the destination country (also known as Port of Discharge or Destination Port). Multiple pages may contain relevant information.
 
         **Guidance for Extraction:**
+        1.  **Identification Cues:** Look for labels such as 'Port of Delivery:', 'Port of Discharge:', 'To Port:', 'Destination Port:', 'Final Destination Port:', 'Destination Port', etc.  Consider variations in spelling and phrasing.
+        2.  **Location:** Usually found in the shipping details section, often near the Dispatch Port information.
+        3.  **Content:** This will be a geographical location name.
+        4.  **Multiple Documents:** The information may reside on one or more of the provided documents.
+        5. **Ambiguity Resolution:** If multiple possible ports are identified, prioritize those with clear labeling or context suggesting a final destination for the goods.
 
-        1.  **Identification Cues:**
-            * **Primary Labels:** Look for labels such as 'Destination Port:', 'Port of Delivery:', 'Port of Discharge:', 'To Port:', 'Final Destination:'.
-            * **Synonyms:** Understand that 'Destination Port', 'Delivery Port', and 'Discharge Port' mean the same thing. The document uses ""**Destination Port**"". 
-            * **Location:** This is usually found in the shipping details section, often near the Dispatch Port information.
-            * **Content:** The value will be a geographical location name.
+        **Examples of Destination Port text:**
+        * "Port of Delivery: Port of New York" (Extract "Port of New York")
+        * "Port of Discharge: Nhava Sheva Port" (Extract "Nhava Sheva Port")
+        * "Destination Port: Mumbai" (Extract "Mumbai")
 
-        2.  **Flexibility and Error Tolerance:**
-            * **Typos & Variations:** Be aware of potential misspellings or OCR errors in the labels.
-            * **Context over Keywords:** If a clear label is missing, use context. The delivery port is the final destination in the shipping route, often located in the importing country (e.g., ""NHAVA SHEVA, INDIA""). 
-
-        3.  **Output Requirements:**
-            * **Format:** Return the extracted port name as a **string**.
-            * **If Not Found:** If the Delivery Port cannot be clearly identified, return **None**.
+        **Output Requirements:**
+        * **Format:** Return the extracted port name as a string.
+        * **If Multiple Found:** Return a comma-separated list if multiple ports seem valid and are clearly indicated as points of destination.
+        * **If Not Found:** If the Destination Port cannot be clearly identified or is absent, return "null".
         """
         },
         {
@@ -917,41 +899,41 @@ DOCUMENT_FIELDS = {
         {
         "name": "INTERMEDIARY BANK NAME",
         "description": """
-        **You are an expert data extraction system. Your task is to extract the Intermediary Bank Name, if one is specified.**
+        **You are an expert data extraction system. Your task is to extract the Intermediary Bank Name, if provided.**
 
-        **Objective:** Accurately locate and extract the full official name of any intermediary or correspondent bank.
+        **Objective:** Accurately extract the intermediary bank's name, if present, from the designated table cell.
 
         **Guidance for Extraction:**
 
-        1.  **Primary Location (Strict Rule):**
-            * You **MUST** locate the information in the section explicitly labeled **""(B) Correspondent / Intermediary Bank name, address& Wire details""**.
-            * This section is typically located below the Beneficiary Bank details. Be careful not to confuse the two.
+        1. **Locate Intermediary Bank Details:** Locate the table cell labeled '(B) Correspondent / Intermediary Bank name, address & Wire details' or similar. This cell is expected to be located directly below the Beneficiary Bank details.
 
-        2.  **What to Extract:**
-            * If the section contains a bank name, extract the **full and official name**.
-            * If the section is empty or marked as N/A, the bank name is not present.
+        2. **Extract Bank Name:** If bank details are present, extract only the name of the intermediary bank. Separate the name from the address using any clear separator (comma, line break).
+
+        3. **Empty Section Handling:** If this section is empty or explicitly marked as N/A, return "null".
 
         **Output Requirements:**
-        * **Format:** Return the extracted bank name as a **string**.
-        * **If Not Found:** If no intermediary bank is specified in its designated section, return **None**.
-        """
+        * **Format:** Return the extracted bank name as a single string.
+        * **If Not Found:** Return "null".
+        """,
         },
         {
         "name": "INTERMEDIARY BANK ADDRESS",
         "description": """
-        **You are an expert data extraction system. Your task is to extract the Intermediary Bank's physical address, if one is specified.**
+        **You are an expert data extraction system. Your task is to extract the Intermediary Bank Address, if provided.**
 
-        **Objective:** Accurately locate and extract the complete mailing address of the intermediary bank.
+        **Objective:** Accurately extract the intermediary bank's address, if present, from the designated table cell.
 
         **Guidance for Extraction:**
 
-        1.  **Primary Location (Strict Rule):**
-            * The address must be found within the section explicitly labeled **""(B) Correspondent / Intermediary Bank name, address& Wire details""**.
-            * Look for address components like street, city, and country.
+        1. **Locate Intermediary Bank Details:** Locate the same table cell as described in the INTERMEDIARY BANK NAME prompt.
+
+        2. **Extract the Address:** If the intermediary bank details are provided, extract the address from that section, following the same principles as the BENEFICIARY BANK ADDRESS prompt.
+
+        3. **Empty Section Handling:** If this section is empty or marked as N/A, return "null".
 
         **Output Requirements:**
-        * **Format:** Return the extracted address as a **single string**.
-        * **If Not Found:** If no physical address is provided in the designated intermediary bank section, return **None**.
+        * **Format:** Return the extracted address as a single string.
+        * **If Not Found:** Return "null".
         """
         },
         {
@@ -1791,26 +1773,24 @@ DOCUMENT_FIELDS = {
         {
         "name": "BENEFICIARY BANK ADDRESS",
         "description": """
-        **You are an expert data extraction system. Your task is to extract the Beneficiary Bank's physical address, if explicitly provided.**
+        **You are an expert data extraction system. Your task is to extract the Beneficiary Bank's address.**
 
-        **Objective:** Accurately locate and extract the complete mailing address of the beneficiary's bank.
+        **Objective:** Accurately extract the complete mailing address of the beneficiary's bank from the designated table cell, handling cases with incomplete addresses or missing data.
 
         **Guidance for Extraction:**
 
-        1.  **Primary Location (Strict Rule):**
-            * The address must be found within the context of the section labeled **""(A) Beneficiary Bank ACCOUNT NO Beneficiary Bank name, address& Wire details""**.
-            * Look for address components (street, city, country, postal code) within this specific section.
+        1. **Locate the Target Cell:** Identify the table cell labeled '(A) Beneficiary Bank ACCOUNT NO: Beneficiary Bank name, address & Wire details' or a similar label.
 
-        2.  **What to Extract:**
-            * Extract the **full and complete mailing address** as a single string.
-            * **Do not mistake** an account number (like an IBAN) or a SWIFT code for a physical address. An address must contain geographical information.
+        2. **Extract the Address:** Extract the address section, which usually follows the bank name and account number within the cell. The address might contain street address, city, state/province, postal code, and country.  If the address is incomplete (missing parts), extract what is available.
 
-        **Example of a valid address:**
-        * ""NO 188 MINZHU ROAD OF LINQU COUNTRY SHANDONG P.R.C""
+        3. **Address Formatting:** Return the extracted address as a single string. If the address contains multiple lines, preserve them as spaces in the single output string. If the address is completely missing, return "null".
+
+        4. **Handle Incomplete Addresses:** If only parts of the address are available, return the partial address as a string. Clearly indicate any missing address components in a separate output field.
 
         **Output Requirements:**
-        * **Format:** Return the extracted bank address as a **single string**.
-        * **If Not Found:** If no physical bank address is specified in the designated section, return **None**.
+            * **Format:** Return the extracted address as a single string. If incomplete, return the partial address.
+            * **If Not Found:** Return "null".
+            * **Additional Output Field (Optional):** For incomplete addresses, include a separate field (e.g., "Missing Address Components") that lists any missing parts.
         """
         },
         {
@@ -2574,8 +2554,6 @@ For each field, you must use the detailed `description` to understand its specif
 
 **Fields to Extract (Name and Detailed Description):**
 {field_list_str}
-
-**Task:** Analyze the provided {num_pages} pages, which together constitute a single logical '{doc_type}' document associated with Case ID '{case_id}'. Your task is to perform a deep-level analysis and extract the specific data fields listed below.
 
 
 **Output Requirements (Strict):**
