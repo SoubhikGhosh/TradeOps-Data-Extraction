@@ -285,8 +285,8 @@ def _extract_data_from_document(
     document_files: list,
     classified_doc_type: str,
     fields_to_extract: list,
-    max_attempts: int = 5, # Configurable max attempts for extraction
-    confidence_threshold: float = 0.60 # Configurable confidence threshold
+    max_attempts: int = EXTRACTION_MAX_ATTEMPTS, # Configurable max attempts for extraction
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD # Configurable confidence threshold
 ) -> Dict[str, Any]: # Returns a dictionary with extracted fields or error
     """
     Uses Vertex AI Gemini model to extract data for a *classified* document type,

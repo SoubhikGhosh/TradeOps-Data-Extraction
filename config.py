@@ -38,6 +38,8 @@ SAFETY_SETTINGS = {
 MAX_WORKERS = 4  # Adjust based on CPU cores and API limits for parallel processing
 TEMP_DIR = "temp_processing"
 OUTPUT_FILENAME = "extracted_data.xlsx"
+DEFAULT_CONFIDENCE_THRESHOLD = 0.60
+EXTRACTION_MAX_ATTEMPTS = 3
 
 # --- Logging Configuration ---
 LOG_FILE = "app_log.log"
