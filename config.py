@@ -2621,7 +2621,7 @@ For each field, you must use the detailed `description` to understand its specif
                 * Difficult or messy handwriting for a substantial portion of the value.
                 * High ambiguity for several characters or critical segments where context provides only weak support. Value inferred with significant assumptions or from unclear/damaged source text.
             * **< 0.60 (Very Low / Unreliable):** Extraction is highly speculative or impossible to perform reliably. Value likely incorrect, incomplete, or based on guesswork. Text is largely illegible, critical characters are indecipherable, or contextual validation fails insurmountably.
-        * If `"value"` is `null` (field not found/applicable), `"confidence"` MUST be `0.0`.
+        * If `"value"` is `null`, `None` and `nan` (field not found/applicable), `"confidence"` MUST be `0.0`.
 
     * `"reasoning"`: A concise but specific explanation justifying the extracted `value` and the assigned `confidence` score. This is crucial for auditability and improvement.
         * Specify *how* the information was identified (e.g., "Directly beside explicit label 'Invoice No.' on page 1.", "Inferred from the 'BILL TO:' address block on page 2 as buyer's name.", "Calculated sum of all line item totals from table on page 3.").
