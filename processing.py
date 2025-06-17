@@ -5,10 +5,10 @@ import concurrent.futures
 import re
 import json
 import json5
-import random  # Added for jitter in retry mechanism
-import time    # Added for sleep in retry mechanism
-import traceback  # Added for error tracing in retry mechanism
-import mimetypes  # Added for file type detection
+import random
+import time
+import traceback
+import mimetypes
 from pathlib import Path
 import pandas as pd
 from collections import defaultdict
@@ -16,15 +16,16 @@ from typing import Dict, List, Tuple, Any
 
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part
-import google.api_core.exceptions as google_exceptions  # Updated import for retry mechanism
+import google.api_core.exceptions as google_exceptions
 
 from config import (
     PROJECT_ID, LOCATION, API_ENDPOINT, MODEL_NAME, SAFETY_SETTINGS,
     DOCUMENT_FIELDS, MAX_WORKERS, TEMP_DIR, OUTPUT_FILENAME,
-    EXTRACTION_PROMPT_TEMPLATE, CLASSIFICATION_PROMPT_TEMPLATE, 
-    SUPPORTED_MIME_TYPES, SUPPORTED_FILE_EXTENSIONS, EXCEL_COLUMN_ORDER
+    EXTRACTION_PROMPT_TEMPLATE, CLASSIFICATION_PROMPT_TEMPLATE,
+    SUPPORTED_MIME_TYPES, SUPPORTED_FILE_EXTENSIONS, EXCEL_COLUMN_ORDER,
+    DEFAULT_CONFIDENCE_THRESHOLD, EXTRACTION_MAX_ATTEMPTS # Added these in config.py
 )
-from utils import log, parse_filename_for_grouping # Import new parsing function
+from utils import log, parse_filename_for_grouping
 
 # --- Initialize Vertex AI ---
 try:
@@ -41,7 +42,6 @@ except Exception as e:
 
 def get_mime_type(file_path):
     """Determine the MIME type of a file based on its extension or content."""
-    # First check by extension
     file_ext = os.path.splitext(file_path)[1].lower()
     if file_ext in ['.pdf']:
         return "application/pdf"
@@ -50,12 +50,10 @@ def get_mime_type(file_path):
     elif file_ext in ['.jpg', '.jpeg']:
         return "image/jpeg"
     
-    # Fallback to mimetypes library
     mime_type, _ = mimetypes.guess_type(file_path)
     if mime_type:
         return mime_type
     
-    # Default to application/octet-stream if we can't determine
     log.warning(f"Could not determine mime type for {file_path}, defaulting to octet-stream")
     return "application/octet-stream"
 
@@ -67,7 +65,7 @@ def _call_vertex_ai_with_retry(
     initial_delay: float = 1.0,
     exponential_base: float = 2.0,
     jitter: bool = True
-) -> Any: # Returns the model's response object
+) -> Any:
     """
     Calls the Vertex AI model's generate_content method with exponential backoff.
     Args:
@@ -85,18 +83,16 @@ def _call_vertex_ai_with_retry(
     """
     num_retries = 0
     delay = initial_delay
-    # Specific Google API errors to retry on.
-    # ResourceExhausted (429), TooManyRequests (429), ServiceUnavailable (503)
     retryable_errors = (
         google_exceptions.ResourceExhausted,
         google_exceptions.TooManyRequests,
         google_exceptions.ServiceUnavailable,
-        google_exceptions.DeadlineExceeded # Can also be transient
+        google_exceptions.DeadlineExceeded
     )
     while True:
         try:
             log.debug(f"Attempting Vertex AI API call (Attempt {num_retries + 1}/{max_retries + 1})")
-            response = model_instance.generate_content(prompt_parts)
+            response = model_instance.generate_content(prompt_parts, safety_settings=SAFETY_SETTINGS) # Added safety_settings
             log.debug(f"Vertex AI API call successful (Attempt {num_retries + 1}/{max_retries + 1})")
             return response
         except retryable_errors as e:
@@ -106,27 +102,26 @@ def _call_vertex_ai_with_retry(
                     f"Max retries ({max_retries}) exceeded for Vertex AI API call. "
                     f"Last error: {type(e).__name__} - {e}"
                 )
-                raise  # Re-raise the last retryable exception
+                raise
             actual_delay = delay
             if jitter:
-                actual_delay += random.uniform(0, delay * 0.25)  # Add up to 25% jitter
+                actual_delay += random.uniform(0, delay * 0.25)
             log.warning(
                 f"Vertex AI API call failed with {type(e).__name__} (Attempt {num_retries}/{max_retries}). "
                 f"Retrying in {actual_delay:.2f} seconds..."
             )
             time.sleep(actual_delay)
-            delay *= exponential_base  # Increase delay
-        except Exception as e:  # Catch other non-retryable Google API errors or general errors
+            delay *= exponential_base
+        except Exception as e:
             log.error(f"Non-retryable error during Vertex AI API call: {type(e).__name__} - {e}")
-            log.error(traceback.format_exc()) # Log full traceback for unexpected errors
-            raise # Re-raise these errors immediately
+            log.error(traceback.format_exc())
+            raise
 
 
 def _prepare_document_parts(document_files: List[Dict]) -> Tuple[List[Part], List[str]]:
     """Prepares Vertex AI Part objects from a list of document file paths (PDF, PNG, JPEG)."""
     parts = []
     file_paths_for_log = []
-    # Sort by page number just in case
     document_files.sort(key=lambda x: x["page"])
     for file_info in document_files:
         file_path = file_info["path"]
@@ -135,10 +130,8 @@ def _prepare_document_parts(document_files: List[Dict]) -> Tuple[List[Part], Lis
             with open(file_path, "rb") as f:
                 file_content = f.read()
             
-            # Determine the MIME type based on the file extension or content
             mime_type = get_mime_type(file_path)
             
-            # Check if the MIME type is supported
             if mime_type not in SUPPORTED_MIME_TYPES:
                 log.warning(f"Unsupported file type: {mime_type} for file {file_path}")
                 continue
@@ -146,28 +139,25 @@ def _prepare_document_parts(document_files: List[Dict]) -> Tuple[List[Part], Lis
             parts.append(Part.from_data(data=file_content, mime_type=mime_type))
         except FileNotFoundError:
             log.error(f"File not found during Vertex AI input prep: {file_path}")
-            return None, file_paths_for_log # Return None for parts on error
+            return None, file_paths_for_log
         except Exception as e:
             log.error(f"Error reading file {file_path}: {e}")
-            return None, file_paths_for_log # Return None for parts on error
+            return None, file_paths_for_log
     return parts, file_paths_for_log
 
-def _parse_vertex_json_response(response: Any, context: str) -> Dict: # Changed Dict | None to Dict
+def _parse_vertex_json_response(response: Any, context: str) -> Dict:
     """
     Parses JSON-like response from Vertex AI, handling potential errors and
     allowing for more lenient JSON5 syntax (e.g., trailing commas, comments).
 
     Returns a dictionary, which either contains the parsed data or error information.
     """
-    processed_text: str = "" # Ensure it's defined for all paths in except blocks
+    processed_text: str = ""
 
     try:
-        # 1. Handle cases where response might be blocked or have unexpected structure
-        if not hasattr(response, 'text') or not response.text: # response.text can be None or empty string
-            # Check for Vertex AI's specific blocked content structure
+        if not hasattr(response, 'text') or not response.text:
             if (hasattr(response, 'candidates') and response.candidates and
                     hasattr(response.candidates[0], 'content') and
-                    # Check if content.parts is empty or None
                     (response.candidates[0].content.parts is None or not response.candidates[0].content.parts) and
                     hasattr(response.candidates[0], 'finish_reason')):
                 block_reason = response.candidates[0].finish_reason
@@ -180,56 +170,41 @@ def _parse_vertex_json_response(response: Any, context: str) -> Dict: # Changed 
 
         raw_text = response.text.strip()
 
-        # 2. Strip potential markdown code fences
         if raw_text.startswith("```json"):
             processed_text = raw_text[7:-3].strip()
-        elif raw_text.startswith("```"): # Less common, just ```
+        elif raw_text.startswith("```"):
             processed_text = raw_text[3:-3].strip()
         else:
             processed_text = raw_text
         
-        # If after stripping, processed_text is empty, it's an issue.
         if not processed_text:
             log.error(f"Response text became empty after stripping markdown for {context}. Original raw text: {raw_text}")
             return {"error": "Empty content after stripping markdown", "raw_response": raw_text}
 
-        # 3. Basic validation for object-like structure (optional, json5 will validate syntax)
-        # This function expects to return a Dict. If the LLM might return a JSON array or other valid JSON types
-        # that are not objects, this check needs adjustment or removal.
         if not (processed_text.startswith('{') and processed_text.endswith('}')):
             log.warning(
                 f"Response for {context} does not strictly start/end with '{{}}'. "
                 f"Attempting to parse with json5 anyway. Processed Text:\n{processed_text}"
             )
-            # You could return an error here if a JSON object is strictly required:
-            # return {"error": "Invalid JSON object structure (not {{}})", "raw_response": processed_text}
 
-
-        # 4. Parse using json5.loads()
-        # This is more lenient and handles trailing commas, comments, etc.
         parsed_data = json5.loads(processed_text)
 
-        # 5. Ensure the parsed data is a dictionary (if strictly required by the function's contract)
         if not isinstance(parsed_data, dict):
-            log.error(f"Parsed data for {context} is not a dictionary. Type: {type(parsed_data)}. Data: {str(parsed_data)[:200]}...") # Log snippet
+            log.error(f"Parsed data for {context} is not a dictionary. Type: {type(parsed_data)}. Data: {str(parsed_data)[:200]}...")
             return {"error": "Parsed JSON is not a dictionary", "type": str(type(parsed_data)), "raw_response": processed_text}
 
         log.debug(f"Successfully parsed JSON5 response as dictionary for {context}")
         return parsed_data
 
-    except ValueError as val_err: # json5.loads raises ValueError for parsing/syntax errors
+    except ValueError as val_err:
         log.error(f"Failed to decode JSON5 response from Vertex AI for {context}. Error: {val_err}")
-        # Log the text that was actually attempted to be parsed
         log.error(f"Processed Text that failed parsing for {context}:\n{processed_text}")
         return {"error": "JSON5 Decode Error", "details": str(val_err), "raw_response": processed_text}
     except AttributeError as attr_err:
-        # This error suggests 'response' object didn't have expected attributes (e.g. 'text', 'candidates')
         log.error(f"Attribute error accessing response data for {context}. Error: {attr_err}. Response type: {type(response)}")
         return {"error": f"AttributeError accessing response data: {attr_err}"}
     except Exception as e:
-        # Catch-all for any other unexpected errors during parsing
         log.exception(f"Unexpected error parsing Vertex AI response for {context}. Error: {e}")
-        # Log the text that was being processed if available
         current_text_to_log = processed_text if processed_text else (response.text if hasattr(response, 'text') else str(response))
         return {"error": f"Unexpected Parsing Error: {str(e)}", "raw_response": current_text_to_log}
 
@@ -238,12 +213,10 @@ def _group_files_by_base_name(folder_path: Path) -> Dict[str, List[Dict]]:
     """Groups document files (PDF, PNG, JPEG) in a folder by parsed base name and sorts by page number."""
     doc_groups = defaultdict(list)
     
-    # Build a pattern to match supported file extensions
     pattern = '|'.join([ext.replace('.', '\\.') for ext in SUPPORTED_FILE_EXTENSIONS])
     supported_file_pattern = f'.*({pattern})$'
     
     for doc_file in folder_path.glob('*'):
-        # Skip if not a file or not a supported extension
         if not doc_file.is_file() or not re.match(supported_file_pattern, doc_file.name, re.IGNORECASE):
             continue
             
@@ -253,7 +226,6 @@ def _group_files_by_base_name(folder_path: Path) -> Dict[str, List[Dict]]:
         except Exception as e:
             log.warning(f"Error parsing filename {doc_file.name} in {folder_path.name}: {e}. Skipping file.")
 
-    # Sort pages within each document group
     for base_name in doc_groups:
         doc_groups[base_name].sort(key=lambda x: x["page"])
 
@@ -263,7 +235,7 @@ def _group_files_by_base_name(folder_path: Path) -> Dict[str, List[Dict]]:
 def _classify_document_type(case_id: str, base_name: str, document_files: list, acceptable_types: list):
     """Uses Vertex AI to classify the document type from a list of document pages (PDF, PNG, JPEG)."""
     log.info(f"Starting classification for Case: {case_id}, Group: '{base_name}', Pages: {len(document_files)}")
-    context = f"Case: {case_id}, Group: '{base_name}' (Classification)" # Context for logging
+    context = f"Case: {case_id}, Group: '{base_name}' (Classification)"
 
     if not document_files:
         log.warning(f"No document files provided for {context}")
@@ -271,21 +243,20 @@ def _classify_document_type(case_id: str, base_name: str, document_files: list, 
 
     parts, file_paths_for_log = _prepare_document_parts(document_files)
     if parts is None:
-         log.error(f"Failed to prepare document parts for {context}")
-         return {"error": "Failed to prepare document parts"}
+           log.error(f"Failed to prepare document parts for {context}")
+           return {"error": "Failed to prepare document parts"}
 
     acceptable_types_str = "\n".join([f"- {atype}" for atype in acceptable_types])
     prompt = CLASSIFICATION_PROMPT_TEMPLATE.format(
         num_pages=len(parts),
         acceptable_types_str=acceptable_types_str
     )
-    log.debug(f"Generated classification prompt for {context}") # Prompt is less sensitive
+    log.debug(f"Generated classification prompt for {context}")
 
     try:
         log.info(f"Sending classification request to Vertex AI for {context}")
         full_request_content = [prompt] + parts
         
-        # Use the retry mechanism here instead of direct API call
         response = _call_vertex_ai_with_retry(
             model_instance=model,
             prompt_parts=full_request_content,
@@ -295,9 +266,9 @@ def _classify_document_type(case_id: str, base_name: str, document_files: list, 
         
         log.info(f"Received classification response from Vertex AI for {context}")
 
-        # Parse the JSON response
         classification_result = _parse_vertex_json_response(response, context)
-        return classification_result # Will contain 'classified_type', 'confidence', 'reasoning' or 'error'
+        # Classification results typically include 'classified_type', 'confidence', 'reasoning'
+        return classification_result
 
     except google_exceptions.GoogleAPIError as api_err:
         log.exception(f"Vertex AI API Error during {context}. Error: {api_err}")
@@ -308,8 +279,19 @@ def _classify_document_type(case_id: str, base_name: str, document_files: list, 
 
 
 # --- Stage 3: Data Extraction ---
-def _extract_data_from_document(case_id: str, base_name: str, document_files: list, classified_doc_type: str, fields_to_extract: list):
-    """Uses Vertex AI Gemini model to extract data for a *classified* document type."""
+def _extract_data_from_document(
+    case_id: str,
+    base_name: str,
+    document_files: list,
+    classified_doc_type: str,
+    fields_to_extract: list,
+    max_attempts: int = 5, # Configurable max attempts for extraction
+    confidence_threshold: float = 0.60 # Configurable confidence threshold
+) -> Dict[str, Any]: # Returns a dictionary with extracted fields or error
+    """
+    Uses Vertex AI Gemini model to extract data for a *classified* document type,
+    implementing a re-ask strategy based on extraction confidence.
+    """
     log.info(f"Starting extraction for Case: {case_id}, Group: '{base_name}', Type: {classified_doc_type}, Pages: {len(document_files)}")
     context = f"Case: {case_id}, Group: '{base_name}', Type: {classified_doc_type} (Extraction)"
 
@@ -320,48 +302,128 @@ def _extract_data_from_document(case_id: str, base_name: str, document_files: li
         log.warning(f"No fields defined for extraction for type {classified_doc_type} in {context}")
         return {"error": f"No fields defined for type {classified_doc_type}"}
 
-
     parts, file_paths_for_log = _prepare_document_parts(document_files)
     if parts is None:
-         log.error(f"Failed to prepare document parts for {context}")
-         return {"error": "Failed to prepare document parts for extraction"}
+           log.error(f"Failed to prepare document parts for {context}")
+           return {"error": "Failed to prepare document parts for extraction"}
 
-    # Prepare the field list string with descriptions for the extraction prompt
     field_list_str = "\n".join([f"- **{field_dict['name']}**: {field_dict['description']}" for field_dict in fields_to_extract])
-
     prompt = EXTRACTION_PROMPT_TEMPLATE.format(
-        # Note: Using classified_doc_type here, not base_name
         doc_type=classified_doc_type,
         case_id=case_id,
         num_pages=len(parts),
         field_list_str=field_list_str
     )
-    log.debug(f"Generated extraction prompt for {context}") # Avoid logging full sensitive prompt if necessary
+    log.debug(f"Generated extraction prompt for {context}")
 
-    try:
-        log.info(f"Sending extraction request to Vertex AI for {context}")
-        full_request_content = [prompt] + parts
-        
-        # Use the retry mechanism here instead of direct API call
-        response = _call_vertex_ai_with_retry(
-            model_instance=model,
-            prompt_parts=full_request_content,
-            max_retries=5,
-            initial_delay=1.0
-        )
-        
-        log.info(f"Received extraction response from Vertex AI for {context}")
+    # --- Re-ask Loop Implementation ---
+    current_attempt = 0
+    # Store the best result for each field across attempts
+    best_field_extractions: Dict[str, Dict[str, Any]] = {} 
+    
+    while current_attempt < max_attempts:
+        log.info(f"Extraction attempt {current_attempt + 1}/{max_attempts} for {context}")
+        try:
+            full_request_content = [prompt] + parts
+            response = _call_vertex_ai_with_retry(
+                model_instance=model,
+                prompt_parts=full_request_content,
+                max_retries=5, # API retry mechanism attempts per model call
+                initial_delay=1.0
+            )
+            
+            extracted_data = _parse_vertex_json_response(response, context)
+            
+            if "error" in extracted_data:
+                log.warning(f"Extraction attempt {current_attempt + 1} failed with parsing/API error for {context}: {extracted_data.get('error')}")
+                # If parsing fails or content is blocked, it's a critical error for this attempt
+                # Re-try, but we need to ensure it doesn't loop indefinitely if it's consistently bad.
+                # The _call_vertex_ai_with_retry handles API retries. If _parse_vertex_json_response
+                # returns an error, it means the model's output was bad.
+                
+                # We can choose to either increment attempt and try again, or if it's a persistent
+                # parsing error, break. For now, let's allow it to re-attempt.
+                pass 
+            else:
+                # Check confidence for each required field
+                all_fields_confident_enough = True
+                current_attempt_field_confidences = {}
 
-        # Parse the JSON response
-        extracted_data = _parse_vertex_json_response(response, context)
-        return extracted_data # Will contain field data or 'error'
+                for field_dict in fields_to_extract:
+                    field_name = field_dict['name']
+                    field_data_from_this_attempt = extracted_data.get(field_name, {})
+                    value = field_data_from_this_attempt.get('value', None)
+                    confidence = field_data_from_this_attempt.get('confidence', 0.0) # Default to 0 if not present
 
-    except google_exceptions.GoogleAPIError as api_err:
-        log.exception(f"Vertex AI API Error during {context}. Error: {api_err}")
-        return {"error": f"Vertex AI API Error: {api_err}"}
-    except Exception as e:
-        log.exception(f"Unexpected Error during {context}. Error: {e}")
-        return {"error": f"Unexpected Error: {e}"}
+                    current_attempt_field_confidences[field_name] = confidence
+
+                    # Update best extraction for this field
+                    # Prioritize value if it's explicitly present, even if confidence is 0.0, over 'null'
+                    # Or if confidence is higher than previously recorded best
+                    if value is not None and (field_name not in best_field_extractions or confidence > best_field_extractions[field_name].get('confidence', -1.0)):
+                        best_field_extractions[field_name] = {
+                            "value": value,
+                            "confidence": confidence,
+                            "reasoning": field_data_from_this_attempt.get('reasoning')
+                        }
+                    
+                    if confidence < confidence_threshold and value is not None and value != "null":
+                        log.warning(f"Field '{field_name}' extracted with low confidence ({confidence:.2f} < {confidence_threshold:.2f}) for {context} on attempt {current_attempt + 1}. Value: {value}")
+                        all_fields_confident_enough = False
+                    elif value is None or value == "null":
+                        log.warning(f"Field '{field_name}' extracted as null/None for {context} on attempt {current_attempt + 1}. Attempting re-extraction.")
+                        all_fields_confident_enough = False # Treat null/None as needing re-extraction
+                
+                # If all fields are good, or if we're at the last attempt, break the re-ask loop
+                if all_fields_confident_enough:
+                    log.info(f"All required fields extracted with sufficient confidence for {context} on attempt {current_attempt + 1}.")
+                    break # Exit the re-ask loop
+                else:
+                    log.info(f"Some fields require re-extraction for {context}. Re-attempting...")
+
+        except google_exceptions.GoogleAPIError as api_err:
+            log.exception(f"Vertex AI API Error during {context} on attempt {current_attempt + 1}. Error: {api_err}")
+            # The _call_vertex_ai_with_retry already handles retries for these.
+            # If it still gets here, it means max_retries for the API call itself were exceeded.
+            # We should probably not re-attempt model logic if API is consistently failing.
+            best_field_extractions["_overall_status"] = {"error": f"Persistent Vertex AI API Error: {api_err}"}
+            break # Break re-ask loop as API is failing
+
+        except Exception as e:
+            log.exception(f"Unexpected Error during {context} on attempt {current_attempt + 1}. Error: {e}")
+            best_field_extractions["_overall_status"] = {"error": f"Unexpected Extraction Error: {e}"}
+            break # Break re-ask loop for unexpected errors
+
+        current_attempt += 1
+        # Optional: Add a small delay between extraction attempts to avoid hammering the model/API
+        if current_attempt < max_attempts:
+            time.sleep(random.uniform(0.5, 2.0)) # Jittered sleep between attempts
+
+    # After the loop, compile the final results based on best_field_extractions
+    final_extraction_results = {}
+    if "_overall_status" in best_field_extractions:
+        return best_field_extractions["_overall_status"] # Return immediate error if critical failure occurred
+
+    for field_dict in fields_to_extract:
+        field_name = field_dict['name']
+        extracted_info = best_field_extractions.get(field_name, {"value": "null", "confidence": 0.0, "reasoning": "Not found or low confidence after attempts"})
+        final_extraction_results[field_name] = {
+            "value": extracted_info["value"],
+            "confidence": extracted_info["confidence"],
+            "reasoning": extracted_info.get("reasoning", "N/A")
+        }
+    
+    # Add a meta-field to indicate if any field was extracted with low confidence after all attempts
+    final_extraction_results["_extraction_status"] = "Success"
+    for field_name, info in final_extraction_results.items():
+        if field_name.startswith("_"): continue # Skip meta fields
+        if info["value"] == "null" or info["confidence"] < confidence_threshold:
+            final_extraction_results["_extraction_status"] = "Partial Success (Low Confidence/Missing Fields)"
+            break
+
+    log.info(f"Finished extraction attempts for {context}. Status: {final_extraction_results.get('_extraction_status', 'Unknown')}")
+    return final_extraction_results
+
 
 MAX_EXCEL_CELL_LENGTH = 32700
 TRUNCATION_ELLIPSIS = "..."
@@ -373,27 +435,17 @@ def sanitize_excel_string(text):
     2. Truncating the string if it exceeds MAX_EXCEL_CELL_LENGTH, adding an ellipsis.
     """
     if not isinstance(text, str):
-        return text # Return non-strings as is
-
-    # 1. Remove characters that are illegal in XML 1.0 (and thus often problematic in Excel)
-    # Valid XML 1.0 characters:
-    # #x9 (tab), #xA (newline), #xD (carriage return),
-    # [#x20-#xD7FF], [#xE000-#xFFFD], [#x10000-#x10FFFF]
-    # This regex removes characters outside these valid ranges,
-    # specifically targeting common control characters other than tab, newline, carriage return.
-    try:
-        text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
-    except TypeError: # Should not happen with the isinstance check, but as a safeguard
         return text
 
+    try:
+        text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
+    except TypeError:
+        return text
 
-    # 2. Truncate if string is too long
     if len(text) > MAX_EXCEL_CELL_LENGTH:
-        # Ensure there's enough space for the ellipsis itself
         if MAX_EXCEL_CELL_LENGTH > len(TRUNCATION_ELLIPSIS):
             text = text[:MAX_EXCEL_CELL_LENGTH - len(TRUNCATION_ELLIPSIS)] + TRUNCATION_ELLIPSIS
         else:
-            # If max_length is too short for ellipsis, just truncate to max_length
             text = text[:MAX_EXCEL_CELL_LENGTH]
             
     return text
@@ -405,10 +457,10 @@ def process_zip_file(zip_file_path: str):
     1. Extracts zip.
     2. Groups files by base filename within each case.
     3. Classifies document type for each group using Vertex AI.
-    4. Extracts data for successfully classified/supported types using Vertex AI.
+    4. Extracts data for successfully classified/supported types using Vertex AI with re-ask.
     5. Aggregates results into a pandas DataFrame and saves to Excel.
     """
-    final_results_list = [] # Store final row data here
+    final_results_list = []
     output_excel_path = Path(OUTPUT_FILENAME)
 
     start_time = time.time()
@@ -430,37 +482,36 @@ def process_zip_file(zip_file_path: str):
             raise
 
         # --- 2. Initial Grouping by Base Filename ---
-        initial_groups = {} # {case_id: {base_name: [file_info_dict]}}
+        initial_groups = {}
         case_folders = [d for d in temp_dir.iterdir() if d.is_dir()]
         if not case_folders:
-             log.error(f"No case folders found in the extracted zip content at {temp_dir}")
-             raise ValueError("No case folders found in the zip file.")
+               log.error(f"No case folders found in the extracted zip content at {temp_dir}")
+               raise ValueError("No case folders found in the zip file.")
 
         for case_folder in case_folders:
             case_id = case_folder.name
             log.info(f"Performing initial file grouping for Case ID: {case_id}")
             initial_groups[case_id] = _group_files_by_base_name(case_folder)
             if not initial_groups[case_id]:
-                 log.warning(f"No processable document groups found in case folder: {case_id}")
-                 # Add a row indicating no docs found for this case
-                 final_results_list.append({
-                     "CASE_ID": case_id,
-                     "GROUP_Basename": "N/A",
-                     "Processing_Status": "No processable document files found"
-                 })
+                   log.warning(f"No processable document groups found in case folder: {case_id}")
+                   final_results_list.append({
+                       "CASE_ID": case_id,
+                       "GROUP_Basename": "N/A",
+                       "Processing_Status": "No processable document files found"
+                   })
 
 
         # --- 3. Classify Document Types Concurrently ---
         classification_tasks = []
-        acceptable_types = list(DOCUMENT_FIELDS.keys()) # Get types we can potentially handle
-        acceptable_types.append("UNKNOWN") # Allow UNKNOWN as a valid classification response
+        acceptable_types = list(DOCUMENT_FIELDS.keys())
+        acceptable_types.append("UNKNOWN")
 
         for case_id, groups in initial_groups.items():
             for base_name, document_files in groups.items():
-                 if document_files: # Only classify if there are files
-                     classification_tasks.append((case_id, base_name, document_files, acceptable_types))
+                   if document_files:
+                       classification_tasks.append((case_id, base_name, document_files, acceptable_types))
 
-        classification_results = {} # {(case_id, base_name): classification_dict or error_dict}
+        classification_results = {}
         if classification_tasks:
             log.info(f"Submitting {len(classification_tasks)} document classification tasks to {MAX_WORKERS} workers.")
             with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="Classifier") as executor:
@@ -477,7 +528,7 @@ def process_zip_file(zip_file_path: str):
                         log.exception(f"Error retrieving classification result for Case: {case_id}, Group: '{base_name}'. Error: {exc}")
                         classification_results[(case_id, base_name)] = {"error": f"Task execution failed: {exc}"}
         else:
-             log.info("No classification tasks to submit.")
+               log.info("No classification tasks to submit.")
 
 
         # --- 4. Extract Data Concurrently (Based on Classification) ---
@@ -487,59 +538,54 @@ def process_zip_file(zip_file_path: str):
                 classified_type = class_result.get("classified_type")
                 if classified_type and classified_type != "UNKNOWN" and classified_type in DOCUMENT_FIELDS:
                     fields_to_extract = DOCUMENT_FIELDS[classified_type]
-                    if fields_to_extract: # Check if there are fields defined
-                        # Retrieve the original document_files list for this group
+                    if fields_to_extract:
                         document_files = initial_groups.get(case_id, {}).get(base_name)
                         if document_files:
-                             extraction_tasks.append((case_id, base_name, document_files, classified_type, fields_to_extract))
+                               extraction_tasks.append((case_id, base_name, document_files, classified_type, fields_to_extract))
                         else:
-                             log.error(f"Logic Error: Document files not found for Case {case_id}, Group '{base_name}' during extraction task prep.")
+                               log.error(f"Logic Error: Document files not found for Case {case_id}, Group '{base_name}' during extraction task prep.")
                     else:
-                         log.warning(f"No fields configured for extraction for classified type '{classified_type}' in Case {case_id}, Group '{base_name}'.")
-                         # Store classification result, but mark as no extraction fields
-                         final_results_list.append({
-                            "CASE_ID": case_id,
-                            "GROUP_Basename": base_name,
-                            "CLASSIFIED_Type": classified_type,
-                            "CLASSIFICATION_Confidence": class_result.get('confidence'),
-                            "CLASSIFICATION_Reasoning": class_result.get('reasoning'),
-                            "Processing_Status": "Extraction skipped - No fields configured"
-                         })
+                               log.warning(f"No fields configured for extraction for classified type '{classified_type}' in Case {case_id}, Group '{base_name}'.")
+                               final_results_list.append({
+                                   "CASE_ID": case_id,
+                                   "GROUP_Basename": base_name,
+                                   "CLASSIFIED_Type": classified_type,
+                                   "CLASSIFICATION_Confidence": class_result.get('confidence'),
+                                   "CLASSIFICATION_Reasoning": class_result.get('reasoning'),
+                                   "Processing_Status": "Extraction skipped - No fields configured"
+                               })
 
                 else:
-                     # Handle UNKNOWN or unconfigured types
-                     status = f"Classification result: {classified_type or 'Not Classified'}"
-                     if classified_type == "UNKNOWN": status = "Classified as UNKNOWN"
-                     elif classified_type: status = f"Classified as '{classified_type}' (Unsupported/Not Configured)"
+                           status = f"Classification result: {classified_type or 'Not Classified'}"
+                           if classified_type == "UNKNOWN": status = "Classified as UNKNOWN"
+                           elif classified_type: status = f"Classified as '{classified_type}' (Unsupported/Not Configured)"
 
-                     final_results_list.append({
-                         "CASE_ID": case_id,
-                         "GROUP_Basename": base_name,
-                         "CLASSIFIED_Type": classified_type,
-                         "CLASSIFICATION_Confidence": class_result.get('confidence'),
-                         "CLASSIFICATION_Reasoning": class_result.get('reasoning'),
-                         "Processing_Status": status
-                     })
+                           final_results_list.append({
+                               "CASE_ID": case_id,
+                               "GROUP_Basename": base_name,
+                               "CLASSIFIED_Type": classified_type,
+                               "CLASSIFICATION_Confidence": class_result.get('confidence'),
+                               "CLASSIFICATION_Reasoning": class_result.get('reasoning'),
+                               "Processing_Status": status
+                           })
             else:
-                 # Handle classification errors
-                 error_msg = class_result.get('error', 'Unknown classification error') if isinstance(class_result, dict) else 'Invalid classification result'
-                 final_results_list.append({
-                    "CASE_ID": case_id,
-                    "GROUP_Basename": base_name,
-                    "Processing_Status": f"Classification Failed: {error_msg}"
-                 })
+                   error_msg = class_result.get('error', 'Unknown classification error') if isinstance(class_result, dict) else 'Invalid classification result'
+                   final_results_list.append({
+                       "CASE_ID": case_id,
+                       "GROUP_Basename": base_name,
+                       "Processing_Status": f"Classification Failed: {error_msg}"
+                   })
 
-        # Dictionary to hold extraction results, keyed by (case_id, base_name)
         extraction_results_map = {}
         if extraction_tasks:
             log.info(f"Submitting {len(extraction_tasks)} document extraction tasks to {MAX_WORKERS} workers.")
             with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="Extractor") as executor:
                 future_to_extract = {
-                    executor.submit(_extract_data_from_document, *task_args): task_args[:2] # Key by (case_id, base_name)
+                    executor.submit(_extract_data_from_document, *task_args): task_args[:2]
                     for task_args in extraction_tasks
                 }
                 for future in concurrent.futures.as_completed(future_to_extract):
-                    key = future_to_extract[future] # (case_id, base_name)
+                    key = future_to_extract[future]
                     try:
                         result = future.result()
                         extraction_results_map[key] = result
@@ -555,7 +601,7 @@ def process_zip_file(zip_file_path: str):
             case_id, base_name, _, classified_type, fields_to_extract = task_args
             key = (case_id, base_name)
             extraction_result = extraction_results_map.get(key)
-            class_result = classification_results.get(key, {}) # Get classification details too
+            class_result = classification_results.get(key, {})
 
             row_data = {
                 "CASE_ID": case_id,
@@ -566,49 +612,42 @@ def process_zip_file(zip_file_path: str):
             }
 
             if isinstance(extraction_result, dict) and "error" not in extraction_result:
-                 row_data["Processing_Status"] = "Extraction Successful"
-                 # Flatten the extracted data
-                 for field_dict in fields_to_extract:
-                     field_name = field_dict['name']
-                     field_data = extraction_result.get(field_name)
-                     # Prefix field names with CLASSIFIED type for clarity
-                     prefix = f"{classified_type}_{field_name}"
-                     if isinstance(field_data, dict):
-                         row_data[f"{prefix}_Value"] = field_data.get('value')
-                         row_data[f"{prefix}_Confidence"] = field_data.get('confidence')
-                         row_data[f"{prefix}_Reasoning"] = field_data.get('reasoning')
-                     else:
-                          log.warning(f"Unexpected format for field '{field_name}' in extraction response for {key}. Data: {field_data}")
-                          row_data[f"{prefix}_Raw"] = str(field_data) # Store raw if format incorrect
-                          row_data["Processing_Status"] = "Extraction Partially Successful (Format Issue)"
-
+                row_data["Processing_Status"] = extraction_result.get("_extraction_status", "Extraction Successful") # Use status from re-ask
+                for field_dict in fields_to_extract:
+                    field_name = field_dict['name']
+                    # Expecting {'value': ..., 'confidence': ..., 'reasoning': ...} from _extract_data_from_document
+                    field_data = extraction_result.get(field_name) 
+                    prefix = f"{classified_type}_{field_name}"
+                    if isinstance(field_data, dict):
+                        row_data[f"{prefix}_Value"] = field_data.get('value')
+                        row_data[f"{prefix}_Confidence"] = field_data.get('confidence')
+                        row_data[f"{prefix}_Reasoning"] = field_data.get('reasoning')
+                    else: # Fallback if field_data itself is not a dict as expected (e.g., just "null")
+                         log.warning(f"Unexpected format for field '{field_name}' in extraction response for {key}. Data: {field_data}")
+                         row_data[f"{prefix}_Value"] = str(field_data) # Store raw if format incorrect
+                         row_data[f"{prefix}_Confidence"] = 0.0 # Default confidence if not provided correctly
+                         row_data[f"{prefix}_Reasoning"] = "N/A - Format issue"
+                         row_data["Processing_Status"] = "Extraction Partially Successful (Format Issue)" # Downgrade status
             else:
-                 # Handle extraction errors
-                 error_msg = extraction_result.get('error', 'Unknown extraction error') if isinstance(extraction_result, dict) else 'Invalid extraction result'
-                 row_data["Processing_Status"] = f"Extraction Failed: {error_msg}"
+                   error_msg = extraction_result.get('error', 'Unknown extraction error') if isinstance(extraction_result, dict) else 'Invalid extraction result'
+                   row_data["Processing_Status"] = f"Extraction Failed: {error_msg}"
 
             final_results_list.append(row_data)
 
 
         # --- 6. Save to Excel ---
         if not final_results_list:
-             log.warning("No data rows were generated for the Excel file.")
-             df = pd.DataFrame([{"Status": "No data processed or extracted"}])
+               log.warning("No data rows were generated for the Excel file.")
+               df = pd.DataFrame([{"Status": "No data processed or extracted"}])
         else:
             log.info(f"Creating DataFrame from {len(final_results_list)} aggregated results.")
             df = pd.DataFrame(final_results_list)
 
-            # --- SANITIZE DATAFRAME ---
             log.info("Sanitizing DataFrame content for Excel compatibility...")
             for col in df.columns:
-                # Apply sanitization only to columns that are likely to contain strings
                 if df[col].dtype == 'object':
-                    # Using .astype(str) first to handle potential mixed types (like numbers mistakenly as objects)
-                    # before applying string operations, though sanitize_excel_string already checks isinstance(text, str).
                     df[col] = df[col].astype(str).apply(sanitize_excel_string)
-            # --- END SANITIZATION ---
-
-            # Reorder columns: Case Info, Status, Classification Info, then Extracted Fields
+            
             existing_cols = df.columns.tolist()
             ordered_cols = [col for col in EXCEL_COLUMN_ORDER if col in existing_cols]
             remaining_cols = sorted([col for col in existing_cols if col not in ordered_cols])
@@ -627,6 +666,4 @@ def process_zip_file(zip_file_path: str):
             elapsed_time = time.time() - start_time
             log.error(f"Processing failed after {elapsed_time:.2f} seconds while saving Excel.")
             raise RuntimeError(f"Failed to save results to Excel: {e}")
-
-    # End of `with tempfile.TemporaryDirectory`
     log.info("Temporary directory cleaned up.")

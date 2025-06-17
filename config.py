@@ -812,27 +812,47 @@ DOCUMENT_FIELDS = {
        {
         "name": "DISPATCH PORT",
         "description": """
-        **You are an expert data extraction system. Your task is to extract the Dispatch Port (Port of Loading) from the provided multi-page document.**
+        **You are an expert data extraction and validation system.** Your primary task is to accurately locate and extract the Dispatch Port (Port of Loading) from the provided multi-page document.
 
-        **Objective:** Accurately locate and extract the name of the port, airport, or place from where the goods are to be dispatched or shipped (also known as Port of Loading).  Multiple pages may contain relevant information.
+        **Objective:** Extract the name of the port, airport, or place from where the goods are to be dispatched or shipped (also known as Port of Loading). Multiple pages may contain relevant information.
 
-        **Guidance for Extraction:**
-        1.  **Identification Cues:** Look for labels such as 'Port of Despatch:', 'Port of Dispatch:', 'Port of Loading:', 'From Port:', 'Shipped From:', 'Origin Port:', 'Name of the shipping company / airlines', 'Port of Despatch', etc. Consider variations in spelling and phrasing.
-        2.  **Location:** This information is typically found within sections relating to shipment details, often near proforma invoice information or other transport details.
-        3.  **Content:** This will be a geographical location name (e.g., a city name, specific port name, or a phrase like "ANY SPANISH PORT").
-        4. **Multiple Documents:** The information may reside on one or more of the provided documents.
-        5. **Ambiguity Resolution:** If multiple possible ports are identified, prioritize those with clear labeling or context suggesting a port of origin for the goods.
+        **Guidance for Extraction and Confidence Handling:**
+
+        1.  **Identification Cues:**
+            * Thoroughly scan for labels such as 'Port of Despatch:', 'Port of Dispatch:', 'Port of Loading:', 'From Port:', 'Shipped From:', 'Origin Port:', 'Name of the shipping company / airlines', 'Port of Despatch', 'Loading Port', 'Departure Port', or any similar contextual phrase indicating the point of origin for shipment.
+            * Consider variations in spelling, capitalization, and phrasing (e.g., 'Port of Despatch', 'Port of Dispatch', 'Port of Loading').
+
+        2.  **Location Context:**
+            * This information is typically found within sections relating to shipment details, often near proforma invoice information, transport details, or alongside 'Destination Port'.
+
+        3.  **Content Expectation:**
+            * The extracted value will be a geographical location name (e.g., a city name, a specific port name like "Port of Hamburg", or a descriptive phrase like "ANY SPANISH PORT"). It should typically be a proper noun or a short descriptive phrase.
+
+        4.  **Multi-Page Processing:**
+            * The information may reside on one or more of the provided documents. Process all pages comprehensively.
+
+        5.  **Confidence-Based Validation & Re-checking:**
+            * **Initial Extraction:** Perform an initial extraction attempt using the identification cues.
+            * **Confidence Assessment:** If the confidence score for the extracted value is low (as determined by the underlying OCR engine's confidence metric), or if the extracted value seems ambiguous/unusual (e.g., contains numbers, unexpected characters, or is too short/long to be a port name):
+                * **Re-scan:** Re-scan the immediate vicinity of the identified cue using a slightly broader search window or more flexible pattern.
+                * **Cross-reference:** Look for corroborating information in other sections or pages of the document that might mention shipping origins or specific ports.
+                * **Contextual Validation:** Check if the extracted value makes sense as a port name in a geographical context (e.g., is it a known city or port?). While direct lookup isn't possible for me, prioritize values that *look* like valid locations over random characters.
+                * **Prioritization:** If multiple candidates are found, prioritize the one with the highest confidence score and the most direct association with an 'Identification Cue'.
+
+        6.  **Ambiguity Resolution:**
+            * If multiple possible ports are identified, prioritize those with clear labeling or strong contextual clues suggesting a port of origin for the goods. If truly ambiguous and multiple valid ports of origin are present (e.g., for different items in a consolidated shipment), return a comma-separated list.
 
         **Examples of Dispatch Port text:**
         * "Port of Despatch ANY SPANISH PORT" (Extract "ANY SPANISH PORT")
         * "Port of Loading: Port of Hamburg" (Extract "Port of Hamburg")
         * "From: Qingdao" (Extract "Qingdao")
+        * "Departure Port: Singapore" (Extract "Singapore")
 
         **Output Requirements:**
         * **Format:** Return the extracted port name as a string.
         * **If Multiple Found:** Return a comma-separated list if multiple ports seem valid and are clearly indicated as points of origin.
-        * **If Not Found:** If the Dispatch Port cannot be clearly identified or is absent, return "null".
-        """,
+        * **If Not Found or Low Confidence and Unresolvable:** If the Dispatch Port cannot be clearly identified, or if all identified candidates have very low confidence and cannot be resolved through re-checking/validation, return "None".
+        """
         },
         {
         "name": "DELIVERY PORT",
