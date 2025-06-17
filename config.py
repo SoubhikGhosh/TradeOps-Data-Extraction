@@ -10,7 +10,7 @@ PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "hbl-uat-ocr-fw-app-prj-spk-4d")
 LOCATION = "asia-south1"
 # Use a powerful multimodal model capable of handling PDFs and complex instructions
 MODEL_NAME = os.getenv(
-    "GEMINI_MODEL", "gemini-1.5-pro-002"
+    "GEMINI_MODEL", "gemini-1.5-flash-002"
 )  # Or gemini-1.5-flash / newer appropriate model
 API_ENDPOINT = (
     f"{LOCATION}-aiplatform.googleapis.com"  # Often not needed if default is correct
@@ -35,7 +35,7 @@ SAFETY_SETTINGS = {
 }
 
 # --- Processing Configuration ---
-MAX_WORKERS = 4  # Adjust based on CPU cores and API limits for parallel processing
+MAX_WORKERS = 100  # Adjust based on CPU cores and API limits for parallel processing
 TEMP_DIR = "temp_processing"
 OUTPUT_FILENAME = "extracted_data.xlsx"
 DEFAULT_CONFIDENCE_THRESHOLD = 0.60
