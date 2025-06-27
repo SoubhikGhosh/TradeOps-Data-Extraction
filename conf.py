@@ -1,20 +1,22 @@
 # config.py
 import os
 from dotenv import load_dotenv
+from vertexai.generative_models import HarmCategory, HarmBlockThreshold
 
 load_dotenv()  # Optional: Load environment variables from a .env file
 
-# --- Gemini API Configuration (NEW) --- AIzaSyDAvvR8-GLxMpfAKgM6DhGnv_vanabQnsU
-# This is now the primary configuration.
-# Get your API key from https://aistudio.google.com/app/apikey
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-# Use a recommended stable model name for the Gemini API
+# --- Vertex AI Configuration ---
+PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "hbl-uat-ocr-fw-app-prj-spk-4d")
+LOCATION = "asia-south1"
+# Use a powerful multimodal model capable of handling PDFs and complex instructions
 MODEL_NAME = os.getenv(
-    "GEMINI_MODEL", "gemini-2.5-flash"
+    "GEMINI_MODEL", "gemini-1.5-flash-002"
+)  # Or gemini-1.5-flash / newer appropriate model
+API_ENDPOINT = (
+    f"{LOCATION}-aiplatform.googleapis.com"  # Often not needed if default is correct
 )
 
-# --- Supported File Types (No Change) ---
+# --- Supported File Types ---
 SUPPORTED_MIME_TYPES = {
     "application/pdf": "PDF",
     "image/png": "PNG",
@@ -24,29 +26,24 @@ SUPPORTED_MIME_TYPES = {
 
 SUPPORTED_FILE_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg"]
 
-# --- Safety Settings (Updated Format) ---
-# The google-generativeai library uses strings instead of enums for safety settings.
+# --- Safety Settings ---
 SAFETY_SETTINGS = {
-    'HARM_CATEGORY_HATE_SPEECH': 'BLOCK_NONE',
-    'HARM_CATEGORY_DANGEROUS_CONTENT': 'BLOCK_NONE',
-    'HARM_CATEGORY_SEXUALLY_EXPLICIT': 'BLOCK_NONE',
-    'HARM_CATEGORY_HARASSMENT': 'BLOCK_NONE',
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
 }
 
-# --- Processing Configuration (No Change) ---
-MAX_WORKERS = 10
+# --- Processing Configuration ---
+MAX_WORKERS = 100  # Adjust based on CPU cores and API limits for parallel processing
 TEMP_DIR = "temp_processing"
 OUTPUT_FILENAME = "extracted_data.xlsx"
 DEFAULT_CONFIDENCE_THRESHOLD = 0.60
-EXTRACTION_MAX_ATTEMPTS = 3
+EXTRACTION_MAX_ATTEMPTS = 10
 
-# --- Logging Configuration (No Change) ---
+# --- Logging Configuration ---
 LOG_FILE = "app_log.log"
-LOG_LEVEL = "INFO"
-
-# --- Column Order and Field Definitions (No Changes) ---
-# (The rest of your extensive DOCUMENT_FIELDS, PROMPT_TEMPLATES, and EXCEL_COLUMN_ORDER
-# definitions remain exactly the same as you provided.)
+LOG_LEVEL = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 # --- Column Order Configuration ---
 EXCEL_COLUMN_ORDER = [
@@ -373,7 +370,7 @@ DOCUMENT_FIELDS = {
         **Guidance for Extraction:**
         1.  **Identification Cues:**
             * **Labels:** Look for labels such as 'Amount and Currency to be Remitted:', 'Amount:', 'Transaction Amount:', 'Remittance Amount:', 'Value:', 'Net Amount:', 'Amount to Remit:'.
-            * **Location:** Typically found near the 'REMITTANCE CURRENCY', 'Directly Adjacent to the Currency Code' or 'before currency code'. It's often in a prominent position related to the payment details.
+            * **Location:** Typically found near the 'REMITTANCE CURRENCY'. It's often in a prominent position related to the payment details.
             * **Format:** The value will be numerical, potentially including decimal points for cents/sub-units and commas as thousands separators.
         2.  **What to Extract:**
             * Extract the **numerical value** of the amount.
@@ -391,7 +388,7 @@ DOCUMENT_FIELDS = {
         * "USD 638.40" (Extract "638.40" - currency is a separate field)
 
         **Output Requirements:**
-        * **Format:** Outputs the extracted amount as a numerical value (float or decimal type if possible, otherwise string representing the number, e.g., "21712.18"). Remove any currency symbols, currency codes, or thousands separators (like commas) before converting to a number, but retain the decimal separator.
+        * **Format:** Return the extracted amount as a **numerical value (float or decimal type if possible, otherwise string representing the number, e.g., "21712.18")**. Remove any currency symbols, currency codes, or thousands separators (like commas) before converting to a number, but retain the decimal separator.
         * **If Not Found:** If the Remittance Amount cannot be clearly identified, return **null**.
         """
         },
@@ -777,34 +774,25 @@ DOCUMENT_FIELDS = {
         1.  **Identification Cues:**
         * **Labels:** Look for labels specifically indicating an account for charges, such as 'Account to be debited for charges ', 'Fee Account No.:', 'Charges Account:', 'Account for Charges:' or similar such verbatim .
         * **Location:** Often found near the main debit account information or in a section discussing bank charges.
-        * **Context:** The key is that this account is specifically designated for fees and is potentially different from the account debited for the remittance amount.
+        * **Context:** The key is that this account is *specifically designated for fees* and is potentially different from the account debited for the remittance amount.
         2.  **What to Extract:**
         * Extract the **complete and exact account number** if a separate account for fees is explicitly mentioned.
         * If the document indicates fees are to be debited from the same account as the principal, or if no separate fee account is mentioned, this field should reflect that (e.g., by being null or by instruction).
         * Example context: "Account to be debited for charges of HDFC Bank Ltd. on us a/c no 50200040555100". Here, 50200040555100 is the fee account.
 
-        3.  **Primary Rule: Check for a Cutout:**
-            * Inspect both options to see if one is cut out or struck through.
-            * If one option is struck out, the **other option** is ALWAYS the selected one. Proceed to Step 5 (Map to Code).
 
-        4.  **Secondary Rule: Check for Positive Marks:**
-            * If and only if NEITHER option is cut out, look for a positive selection mark next to an option.
-            * **Positive Selection Marks:** A tick mark (✓), 'X', star (*), or dot (•).
-            * The option associated with the mark is the selected one. Proceed to Step 5.
+        3. **Primary Location and Logic:** Find the row labeled ""Account to be debited for charges of HDFC Bank Ltd."" or similar.
+        4. **"on us" Condition:** If ""on us"" is selected (indicated by a mark or text like ""(YES) on us""), and an account number is explicitly provided, extract that number.
+        5. **"on beneficiary" Condition:** If ""on beneficiary"" is selected, return "null".
+        6. **Fallback Condition:** If ""on us"" is selected but no account number is given, use the main DEBIT ACCOUNT NO (after verifying it against IBAN standards and digit count).
 
-        5.  **Default Rule:**
-            * If no selection can be made from the rules above (no cutout and no positive marks), the default selection is 'on us'.
+        7. **High-Fidelity Digit Extraction:** Capture *every* digit exactly as it appears, including repetitions. Do not collapse or modify the sequence of digits.
 
-        6.  **Map to Code:** After determining the selected text, convert it to the final one-letter code:
-            * **'on us'** or **'OUR'** -> maps to **'U'**
-            * **'on beneficiary'** or **'BEN'** -> maps to **'O'**
-            * **'on Full'** or **'BEN'** -> maps to **'U'**
+        8. **IBAN Validation:** Check if the extracted number conforms to IBAN standards for the relevant country. If not, return "null."
 
-        **Examples of the Full Logic:**
-        * **Source (Cutout Rule):** `Charges: ~~on us~~ () on beneficiary` -> 'on beneficiary' is selected -> **Extract 'O'**.
-        * **Source (Positive Mark Rule):** `Charges: () on us ☑ on beneficiary` -> 'on beneficiary' is selected -> **Extract Account Number**.
-        * **Source (Default Rule):** `Charges: () on us () on beneficiary` -> 'on us' is the default -> **Extract 'O'**.
-        * **Source (Default Rule):** `Charges: () on us () on beneficiary () on full` -> 'on beneficiary' is the default -> **Extract 'O'**.
+        9. **Digit Count Verification:**  The digit count should be within the plausible range for Indian bank accounts (typically 9-18 digits). If outside this range *after* removing prefixes and suffixes, return "null".
+
+        10. **Format:** The final output should be only the validated sequence of digits (numeric string).
 
         **Example:**
         * **Source Text:** "(YES) on us a/c no 1234567890"
@@ -1514,124 +1502,82 @@ DOCUMENT_FIELDS = {
                             """,
         },
         {
-            "name": "INVOICE DATE",
-            "description": """Extract the specific date when the invoice or proforma invoice was created or issued by the seller/issuer.
+        "name": "INVOICE DATE",
+        "description": """Extract the date when the invoice or proforma invoice was issued.
 
-            **Typical Location & Labels:**
-            This date is usually found in the header of the document, often near the Invoice Number (or Proforma No.), or close to the seller's details.
-            Look for labels such as 'Invoice Date', 'Date', 'Issue Date', 'Date of Issue', or similar terms. Prioritize the date most clearly associated with the overall document issuance.
+        **Typical Locations & Labels:**
+        * Header section: 'Date', 'Invoice Date', 'Offer date', 'PO Date'.
+        * Often near the 'Invoice No.' or 'Proforma No.'.
 
-            **Important Considerations for Extraction:**
-            1.  **OCR Imperfections in Dates:** The input text (from OCR) can have errors. Numbers in dates are prone to misrecognition (e.g., '0' vs 'O', '1' vs '7', '3' vs '8', '5' vs '6'). Interpret carefully to capture the most plausible date.
-            2.  **Date Formats:** Dates can appear in various formats (e.g., DD/MM/YYYY, MM/DD/YYYY, DD-MMM-YY, YYYY-MM-DD, DD.MM.YYYY). Extract the date as it appears in the document.
-            3.  **Ambiguity with Multiple Dates:** If multiple dates are present (e.g., order date, shipping date, invoice date), ensure you extract the primary issuance date of this specific invoice/proforma invoice. This is typically the date listed alongside or directly under the main invoice/proforma number.
-            4.  **Readability Issues:** If parts of the date text appear garbled or unclear from the OCR output, extract the legible portions accurately.
+        **Extraction Logic:**
+        1.  **Prioritize Issuance Date:** Focus on the date clearly associated with the document's creation.
+        2.  **Format Preservation:** Extract the date exactly as it appears (e.g., DD/MM/YYYY, YYYY-MM-DD, DD.MM.YYYY, YYYY/MM/DD).
+        3.  **Handle Ambiguity:** Distinguish from other dates (e.g., shipment date, contract date).
 
-            **Output Format:**
-            Extract the date as a single string, preserving its original format as seen in the document.
-
-            **Example (from the provided document context):**
-            In the current document (a proforma invoice), the relevant date is found next to the label 'DATE:' in the section containing the 'PROFORMA NO:', and its value is '10/10/2024'.
-
-            **Task:** Locate and accurately extract this issuance date from the provided document text.
-            """,
+        **Output Format:** String (e.g., "10/10/2024", "2025-1-16", "23/04/2025"). Return `null` if not found.
+        """
         },
         {
             "name": "INVOICE NO",
-            "description": """Extract the unique alphanumeric identifier assigned to this specific invoice or proforma invoice by the seller/issuer.
+            "description": """Extract the unique alphanumeric identifier for the invoice or proforma invoice.
 
-            **Typical Location & Labels:**
-            This identifier is critical and usually prominently displayed, often in the header of the document, near the date, or near the seller's information.
-            Search for labels such as 'Invoice No.', 'Invoice #', 'Inv. No.', 'PROFORMA NO:', 'Proforma Invoice No.', 'Reference #', 'Document No.', or similar terms.
+            **Typical Locations & Labels:**
+            * Prominently displayed in the header.
+            * Labels: 'Invoice No.', 'Proforma Invoice', 'PO No', 'PROFORMA NO:', 'Sales Contract'.
 
-            **Important Considerations for Extraction:**
-            1.  **OCR Imperfections & Alphanumeric Strings:** The input text (from OCR) can have errors. Invoice numbers are often alphanumeric and may contain characters that OCR can confuse (e.g., '0' vs 'O', '1' vs 'I' or 'l', 'S' vs '5', 'G' vs '6', 'B' vs '8'). Interpret carefully to capture the most plausible identifier.
-            2.  **Special Characters & Formatting:** Invoice numbers can include special characters such as hyphens ('-'), slashes ('/'), spaces, or colons. Ensure these are captured as part of the invoice number if they appear to be integral to it.
-            3.  **Completeness:** Extract the entire sequence of characters that form the invoice number. It might be a combination of letters, numbers, and symbols.
-            4.  **Readability Issues:** If parts of the invoice number text appear garbled or unclear from the OCR output, extract the legible portions accurately. Note if any part seems particularly ambiguous.
+            **Extraction Logic:**
+            1.  **Primary Identifier:** Extract the main number/code associated with the document.
+            2.  **Include Special Characters:** Capture hyphens, slashes, or spaces if integral to the number (e.g., "IN010 / 2024-25").
+            3.  **Alphanumeric Accuracy:** Be precise with letters and numbers.
 
-            **Output Format:**
-            Extract the identifier as a single string.
-
-            **Example (from the provided document context):**
-            In the current document (a proforma invoice), the identifier is found next to the label 'PROFORMA NO:' and its value is 'IN010 / 2024-25'.
-
-            **Task:** Locate and accurately extract this unique invoice identifier from the provided document text.
-            """,
+            **Output Format:** String (e.g., "HTC_250404_SARV01", "IN010 / 2024-25", "6241112"). Return `null` if not found.
+            """
         },
         {
-           "name": "BUYER NAME",
-            "description": """Extract the full legal name of the individual or company purchasing the goods or services, often referred to as the buyer or consignee.
+            "name": "BUYER NAME",
+            "description": """Extract the full legal name of the entity purchasing the goods or services.
 
-            **Typical Location & Labels:**
-            Look for this information under or adjacent to labels such as 'CONSIGNEE:', 'Buyer:', 'Bill To:', 'Customer:', 'Sold To:', 'Importer:', 'To:', or 'Applicant:'. It's generally the primary name listed in the recipient details block.
+            **Typical Locations & Labels:**
+            * Look under sections like 'Buyer', 'Bill To', 'Consignee', 'Demand Side', 'Invoice\'s addressee', 'To'.
 
-            **Important Considerations for Extraction:**
-            1.  **OCR Imperfections:** The input text is generated by OCR and may contain errors, such as misrecognized characters (e.g., 'I' vs 'L', 'O' vs '0', 'S' vs '5') or inconsistencies in spacing. Please interpret the text carefully to identify the most plausible name.
-            2.  **Ambiguous Characters/Formatting:** Company names can sometimes include special characters or varied casing. Extract the name as accurately as it appears, but be mindful that OCR might misinterpret some stylistic elements. If characters are ambiguous, choose the interpretation that forms a coherent name.
-            3.  **Readability Issues:** If parts of the name text appear garbled, unclear, or potentially unreadable as provided by the OCR, extract the legible portions to the best of your ability. If a significant part is indecipherable, try to capture what is clear.
-            4.  **Completeness:** Ensure you capture the full name. This might be on a single line or could be the first prominent line in the consignee/buyer address block before the street details begin.
+            **Extraction Logic:**
+            1.  **Primary Name:** Identify the most prominent name in the buyer's details block.
+            2.  **Completeness:** Capture the full name, including legal suffixes (e.g., Pvt Ltd, Co. Ltd.).
+            3.  **OCR Robustness:** Interpret characters carefully for common OCR errors (e.g., 'I' vs 'L', 'O' vs '0').
 
-            **Output Format:**
-            Extract the name as a single string.
-
-            **Example (from the provided document context):**
-            For instance, in the current invoice, the buyer's name 'SP IMPEX' is the first line under the 'CONSIGNEE' heading.
-
-            **Task:** Identify and extract this name precisely from the provided document text.
-            """,
+            **Output Format:** String (e.g., "SARVATRA SOLAR SOLUTION", "POLYCHEMICAL FIBROPLAST PVT LTD.", "LEDGED ENERGY PVT LTD").
+            """
         },
         {
             "name": "BUYER ADDRESS",
-            "description": """Extract the complete mailing address of the buyer or consignee from the provided text.
-            This information is typically found under headings like 'CONSIGNEE:', 'Bill To:', 'Deliver To:', or 'Buyer:'.
+            "description": """Extract the complete mailing address of the buyer/consignee.
 
-            **Important Considerations for Extraction:**
-            1.  **OCR Imperfections:** The input text is generated by OCR and may contain errors, such as misrecognized characters (e.g., '1' vs 'I', '0' vs 'O', 'S' vs '5', '2' vs 'Z') or inconsistencies in spacing. Please interpret the text carefully, prioritizing common address structures and plausible character sequences.
-            2.  **Ambiguous Characters/Numbers:** Pay special attention to numbers within the address (street numbers, postal codes). If a number seems ambiguous or could be misread, extract the most likely interpretation based on context. For instance, if a character could be '2' or '4', choose the one that forms a more coherent address component.
-            3.  **Readability Issues:** If parts of the address text appear garbled, unclear, or potentially unreadable as provided by the OCR, extract the legible portions to the best of your ability. If a significant part is indecipherable, try to capture what is clear.
-            4.  **Structure:** The address often includes the company name, street details (including number and street name), city, state/province, postal code, and country.
+            **Typical Locations & Labels:**
+            * Directly under or adjacent to the 'BUYER NAME'.
+            * Sections like 'Address', 'Add:'.
 
-            **Output Format:**
-            Extract the full, multi-line address as a single string, preserving line breaks (e.g., using '\n' as a separator).
+            **Extraction Logic:**
+            1.  **Full Address Block:** Capture all lines of the address.
+            2.  **Preserve Line Breaks:** Use '\\n' to separate original lines.
+            3.  **OCR Robustness:** Carefully parse numbers and characters in street names, postal codes.
 
-            **Example based on common structure (verify against document text):**
-            'COMPANY NAME\nSTREET NUMBER AND NAME,\nDISTRICT/AREA, CITY\nCITY – POSTAL CODE STATE, COUNTRY'
-
-            **Locate the text block clearly designated for the recipient of the goods or invoice and apply the above considerations during extraction.**
-            For instance, in the provided document, this is under 'CONSIGNEE'. The street number initially appeared as 'NO-29', but if it were 'No.-44' and the OCR was slightly off, careful interpretation of the characters would be needed.
-            """,
+            **Output Format:** String (e.g., "12, SATYAM BUNGLOWS, GOPAL CHOWK ROAD, NIKOL\nAHMEDABAD AHMADABAD GUJARAT 382350", "J212 BHOSARI MIDC, PUNE, MAHARASHTRA, INDIA 411026").
+            """
         },
         {
             "name": "BUYER COUNTRY",
-            "description": """First, identify the full name of the country where the buyer is officially located or registered from their address details.
-            This is often the last line or a prominent part of the buyer's address block (e.g., under 'CONSIGNEE:', 'Bill To:').
-            Second, based on the identified full country name, provide its standard 2-letter ISO 3166-1 alpha-2 country code.
+            "description": """Identify the buyer's country and provide its 2-letter ISO 3166-1 alpha-2 code.
 
-            **Process:**
-            1.  **Identify Full Country Name:**
-                * Scan the buyer's address section for the country name.
-                * **OCR Imperfections:** Be aware that the OCR'd text for the country name might have minor errors (e.g., 'Indla' instead of 'India', 'Untted States' instead of 'United States', 'Canda' for 'Canada'). Interpret to identify the most plausible standard English country name.
-                * **Address Structure:** The country is usually the most encompassing geographical part of the address, often appearing last.
-                * **Readability:** If the country name is significantly garbled or unreadable from the OCR'd text, it may be difficult to determine the code accurately. Extract what is most legible.
+            **Typical Locations & Labels:**
+            * Last line or prominent part of the buyer's address.
 
-            2.  **Convert to 2-Letter ISO Code:**
-                * Once the most plausible full country name is identified, convert it to its corresponding 2-letter ISO 3166-1 alpha-2 code.
-                * The model should use its general knowledge for this conversion.
-                * *Examples of Mapping:*
-                    * 'India' should result in 'IN'.
-                    * 'United States' or 'USA' should result in 'US'.
-                    * 'Germany' should result in 'DE'.
-                    * 'TANZANIA' (from the seller's address in the example document) would be 'TZ'.
+            **Extraction Logic:**
+            1.  **Identify Full Country Name:** Extract the most plausible standard English country name from the address (e.g., "India", "China", "Singapore").
+            2.  **Convert to ISO Code:** Convert the identified country name to its 2-letter ISO 3166-1 alpha-2 code (e.g., 'IN' for India, 'CN' for China, 'SG' for Singapore).
+            3.  **Handle Regional Indicators:** If only a state or city is present (e.g., "Maharashtra", "Kolkata"), infer the country (e.g., "India") and then convert.
 
-            **Final Output Value for this Field:**
-            The value extracted should **ONLY be the 2-letter ISO country code.**
-
-            **Example (based on the provided document context for the BUYER):**
-                * In the 'CONSIGNEE' address, the country is identified as 'INDIA'.
-                * The 2-letter ISO 3166-1 alpha-2 code for 'INDIA' is 'IN'.
-                * Therefore, the expected output for 'BUYER_COUNTRY' is 'IN'.
-            """,
+            **Output Format:** 2-letter ISO country code as a string (e.g., "IN", "CN", "SG"). Return `null` if the country cannot be identified.
+            """
         },
         {
             "name": "SELLER NAME",
@@ -1731,271 +1677,170 @@ DOCUMENT_FIELDS = {
             """,
         },
         {
-            "name": "INVOICE AMOUNT/VALUE",
-            "description": """Extract the primary financial value of the invoice, typically the total sum of goods/services listed. This could be a subtotal, a net amount before final charges/taxes, or the grand total if no other total is more prominent or if it's the main sum being invoiced.
+        "name": "INVOICE AMOUNT/VALUE",
+        "description": """Extract the primary monetary value representing the total cost of goods or services *before* any final adjustments like shipping, handling, or the absolute grand total if those are separate. This is typically a "subtotal" or the direct sum of line items.
 
-            **Typical Location & Labels:**
-            Look for amounts associated with labels like 'Total', 'Subtotal', 'Net Amount', 'Invoice Total', 'Amount Due before Tax'. It's crucial to distinguish this from individual line item amounts if an overall total for the goods/services is present. This value should be numerical.
+        **Typical Locations & Labels:**
+        * [cite_start]Look for 'Subtotal' [cite: 27][cite_start], 'Total' [cite: 19, 226, 34, 77, 154][cite_start], 'Net Amount', 'Base Total' [cite: 34][cite_start], 'Total price'[cite: 77].
+        * [cite_start]Often found at the bottom of the itemized list[cite: 19, 27, 34, 77, 154, 226].
 
-            **Important Considerations for Extraction:**
-            1.  **Clarity of 'Total':** Identify the most significant sum representing the value of the invoiced items/services. On some invoices, multiple totals exist (e.g., Subtotal, Tax, Grand Total). This field aims for the main sum of the goods/services themselves, which might be a subtotal before other charges, or the grand total if the structure is simple.
-            2.  **Numerical Value Only:** Extract only the numerical value. Do not include currency symbols or codes in this specific field output. Ensure correct parsing of thousands separators (commas) and decimal points if present (e.g., '212,800.00' should be extracted as '212800.00' or '212800').
-            3.  **OCR Imperfections:** Numbers are prone to OCR errors (e.g., '1' vs '7', '0' vs '8'). Validate against calculations if possible (e.g., quantity * rate).
-            4.  **Distinction from other totals:** If 'Grand Total' or 'Total Amount Due' is very distinct and appears to be a final calculation after this sum, this field should capture the sum *before* those final adjustments if it's clearly presented. In simpler invoices, this might be the only total.
+        **Extraction Logic:**
+        1.  [cite_start]**Prioritize Subtotal:** If a clear 'Subtotal' or 'Base Total' is present[cite: 27, 34], extract that.
+        2.  [cite_start]**Fallback to Item Sum Total:** If no explicit subtotal, use the 'Total' sum directly under the line items[cite: 19, 77, 154, 226].
+        3.  **Numerical Only:** Extract digits and decimal points only. [cite_start]Remove currency symbols (e.g., 'U$', '$', 'CHF') [cite: 19, 27, 34, 77, 153, 226] and thousands separators (e.g., comma, space) during extraction.
 
-            **Output Format:**
-            Extract the numerical value as a string, ideally cleaned of currency symbols and non-essential formatting (e.g., '212800', '1500.75').
-
-            **Example (from the provided document context):**
-            The 'Description of Goods' table shows a 'TOTAL AMOUNT' of '212800'. This represents the sum of the invoiced goods.
-
-            **Task:** Identify and extract the primary total sum for the goods/services listed on the invoice. For this document, it is '212800'.
-            """,
+        **Output Format:** String, representing a clean numerical value (e.g., "98496", "83000.00", "184350.00").
+        """
         },
         {
             "name": "INVOICE AMOUNT/VALUE IN WORDS",
-            "description": """Extract the total invoice amount written out in words (e.g., 'One Hundred Thirty-Five Thousand Seven Hundred Fifty Dollars Only').
+            "description": """Extract the total invoice amount explicitly written out in words.
 
-            **Typical Location & Labels:**
-            This field is often found near the numerical total amount. It might be labeled 'Amount in Words', 'Say Total', 'In Words', or simply appear as a textual representation of the sum without a specific label.
+            **Typical Locations & Labels:**
+            * Often near the numerical total.
+            * Look for 'Amount in Words', 'Say Total', 'Total in Words', or similar phrasing.
 
-            **Important Considerations for Extraction:**
-            1.  **Presence:** This field is not always present on invoices. If no amount in words is found, this should be indicated clearly (e.g., by outputting 'null' or an empty string).
-            2.  **OCR Imperfections:** Textual representations of numbers can be long and prone to OCR errors. Extract the most plausible text.
-            3.  **Exact Wording:** Capture the full text as written, including any suffixes like 'Only' or currency mentions if they are part of the worded amount.
+            **Extraction Logic:**
+            1.  [cite_start]**Presence Check:** This field is often absent from Proforma Invoices or Purchase Orders[cite: 19, 27, 34, 77, 154, 226].
+            2.  **Exact Text:** If found, capture the full, exact textual representation.
 
-            **Output Format:**
-            Extract the amount in words as a single string. If not found, return 'null'.
-
-            **Example (from the provided document context):**
-            This specific proforma invoice does not appear to have the total amount written out in words. In such a case, the output should be 'null'.
-
-            **Task:** Locate and extract the total invoice amount written in words. If it is not present, indicate 'null'.
-            """,
+            **Output Format:** String, or `null` if not present.
+            """
         },
         {
             "name": "BENEFICIARY ACCOUNT NO / IBAN",
-            "description": """
-        **You are an expert data extraction system. Your task is to extract the Beneficiary's Bank Account Number or IBAN from the document.**
+            "description": """Extract the Beneficiary's Bank Account Number or IBAN.
 
-        **Objective:** Accurately locate and extract the beneficiary's bank account number or International Bank Account Number (IBAN) where the funds are to be credited.
+            **Typical Locations & Labels:**
+            * [cite_start]Look in 'Bank info' [cite: 96][cite_start], 'ADVISING BANK' [cite: 188][cite_start], 'Bank Details' [cite: 144, 229][cite_start], 'Seller's bank information' [cite: 146] sections.
+            * [cite_start]Labels: 'Account No.:' [cite: 190][cite_start], 'A/C no:' [cite: 148][cite_start], 'ACCOUNT NUMBER'[cite: 190, 229]. [cite_start]Also check for 'IBAN:'[cite: 191].
 
-        **Guidance for Extraction:**
-        1.  **Identification Cues:**
-        * **Labels:** Look for labels such as 'Account No.:', 'A/C No.:', 'Account Number:', 'Beneficiary Account No.:', 'IBAN:', 'Beneficiary IBAN:', 'Acc No:', 'A/c ID:'.
-        * **Location:** This information is typically found within the 'Beneficiary Details' or 'Beneficiary Bank Details' section, often close to the beneficiary's name and bank name.
-        * **Format:**
-            * **Account Numbers** vary widely in format (can be numeric, alphanumeric, may contain hyphens or spaces).
-            * **IBANs** have a specific structure: they start with a two-letter country code, followed by two check digits, and then a country-specific Basic Bank Account Number (BBAN) which can be up to 30 alphanumeric characters (e.g., DE89370400440532013000, GB29NWBK60161331926819).
-        2.  **What to Extract:**
-        * Extract the **complete and exact account number or IBAN** as it appears.
-        * Include all alphanumeric characters and any embedded hyphens or spaces if they are part of the presented number (though it's common to normalize by removing spaces/hyphens later). For extraction, capture as presented.
-        * If both an IBAN and account number are present for the beneficiary, output the IBAN and NOT Account Number.
+            **Extraction Logic:**
+            1.  **Prioritize IBAN:** If both IBAN and a generic account number are present, extract the IBAN. [cite_start]In provided documents, only 'Account No.' or 'ACCOUNT NUMBER' is used[cite: 148, 190, 229].
+            2.  [cite_start]**Completeness:** Extract the full alphanumeric string, including hyphens if part of the displayed number[cite: 190].
+            3.  **Strictly from Bank Details:** Only extract numbers explicitly associated with a bank account in the payment/bank details section.
 
-        **Important Considerations for Extraction:**
-        1.  **IBAN Identification:** An IBAN typically starts with a two-letter country code (e.g., 'IT' for Italy, 'DE' for Germany, 'GB' for Great Britain) followed by check digits and the basic bank account number. Ensure the extracted value matches this structure and is labeled as IBAN.
-        2.  **Specificity:** Only extract the value if it is explicitly identified as an IBAN. Do not extract other account numbers for this field.
-        3.  **Accuracy:** If an IBAN is found, ensure precise extraction, including all alphanumeric characters.
-        4.  **OCR Imperfections:** IBANs are alphanumeric and can be misread by OCR (e.g., '0' vs 'O', 'I' vs 'L', '5' vs 'S'). Interpret carefully.
-        5.  **Absence:** If no IBAN is explicitly stated or identifiable, this field should extract account number.
-
-        **Examples of Account No / IBAN text:**
-        * "IBAN: DE89370400440532013000"
-        * "Account No.: 001-234567-890"
-        * "A/C No: 218246110956"
-        * "Beneficiary Account Number: FR7630006000011234567890189"
-
-        **Output Requirements:**
-        * **Format:** Return the extracted account number or IBAN as a **string**.
-        * **If Not Found:** If the Beneficiary Account No / IBAN cannot be clearly identified, output **null**.
-        * **Normalization Note:** While extracting as presented, downstream processes might normalize by removing spaces and hyphens.
-        """
+            [cite_start]**Output Format:** String (e.g., "960-003712-42-003" [cite: 190][cite_start], "389677215883" [cite: 148]). [cite_start]Return `null` if not found[cite: 25, 34, 77].
+            """
         },
         {
-        "name": "BENEFICIARY BANK",
-        "description": """
-        **You are an expert data extraction system. Your task is to extract the Beneficiary Bank Name from its specific, designated section.**
+            "name": "BENEFICIARY BANK",
+            "description": """Extract the full official name of the bank where the beneficiary holds their account.
 
-        **Objective:** Accurately locate and extract only the full, official name of the bank where the beneficiary holds their account.
+            **Typical Locations & Labels:**
+            * [cite_start]Found in 'Bank info' [cite: 96][cite_start], 'ADVISING BANK' [cite: 188][cite_start], 'Bank Details' [cite: 144, 229][cite_start], 'Seller's bank information' [cite: 146] sections.
+            * [cite_start]Labels: 'BANK NAME:' [cite: 188][cite_start], 'BANK:' [cite: 145][cite_start], 'Beneficiary Bank:'[cite: 99].
 
-        **Guidance for Extraction:**
+            **Extraction Logic:**
+            1.  [cite_start]**Direct Label Match:** Prioritize text directly following 'BANK NAME:', 'BANK:', or 'Beneficiary Bank:'[cite: 99, 145, 188].
+            2.  [cite_start]**Contextual Inference:** If no direct label, infer from proximity to account number and SWIFT code[cite: 99, 145, 188].
+            3.  **Exclude Address/Other Details:** Extract only the bank's name. [cite_start]Remove addresses, account numbers, or SWIFT codes that might be in the same line or field[cite: 99, 145, 188].
 
-        1.  **Primary Location (Strict Rule):**
-            * You **MUST** locate the information in the cell adjacent to the label **""(A) Beneficiary Bank ACCOUNT NO Beneficiary Bank name, address& Wire details""**. This section is located below the main beneficiary name and address row.
-
-        2.  **Intelligent Separation:**
-            * The source cell may contain multiple pieces of information (bank name, address, account number, SWIFT code).
-            * Your task is to **isolate only the bank's name**. Use your knowledge of famous international bank names (e.g., ""Banco Sabadell"", ""HSBC"", ""Bank of China"") to identify it.
-            * **Strictly exclude** all other details like account numbers (IBANs), SWIFT/BIC codes, addresses, or phone numbers from the final output.
-
-        **Example based on the document:**
-        * **Source Text:** ""Banco Sabadell: ES1300815181000001071017 SWIFT: BSABESBBXXX""
-        * **Correct Extraction:** ""Banco Sabadell""
-
-        **Output Requirements:**
-        * **Format:** Return the extracted bank name as a **string**.
-        * **If Not Found:** If the Beneficiary Bank name cannot be clearly identified and isolated from the specified location, return **None**.
-        """
+            [cite_start]**Output Format:** String (e.g., "WOORI BANK SEOUL KOREA" [cite: 188][cite_start], "Bank Of China, Taizhou Branch Zhejiang Province, China" [cite: 145]). [cite_start]Return `null` if not found[cite: 25, 34, 77].
+            """
         },
         {
-        "name": "BENEFICIARY BANK ADDRESS",
-        "description": """
-        **You are an expert data extraction system. Your task is to extract the Beneficiary Bank's address.**
+            "name": "BENEFICIARY BANK ADDRESS",
+            "description": """Extract the complete mailing address of the beneficiary's bank.
 
-        **Objective:** Accurately extract the complete mailing address of the beneficiary's bank from the designated table cell, handling cases with incomplete addresses or missing data.
+            **Typical Locations & Labels:**
+            * [cite_start]Found in 'Bank info' [cite: 96][cite_start], 'ADVISING BANK' [cite: 188][cite_start], 'Bank Details' [cite: 144, 229][cite_start], 'Seller's bank information' [cite: 146] sections.
+            * [cite_start]Labels: 'Bank Address:' [cite: 102][cite_start], 'Add:'[cite: 148]. [cite_start]Often directly follows the bank name or account number[cite: 102, 148, 189].
 
-        **Guidance for Extraction:**
+            **Extraction Logic:**
+            1.  [cite_start]**Proximity to Bank Name/Account:** Look for address components (street, city, state, country, postal code) immediately following the bank name or account details[cite: 102, 148, 189].
+            2.  **Completeness:** Capture all available address lines.
+            3.  [cite_start]**Line Breaks:** Use '\\n' to preserve multi-line formatting from the original document[cite: 102, 148, 189].
 
-        1. **Locate the Target Cell:** Identify the table cell labeled '(A) Beneficiary Bank ACCOUNT NO: Beneficiary Bank name, address & Wire details' or a similar label.
-
-        2. **Extract the Address:** Extract the address section, which usually follows the bank name and account number within the cell. The address might contain street address, city, state/province, postal code, and country.  If the address is incomplete (missing parts), extract what is available.
-
-        3. **Address Formatting:** Return the extracted address as a single string. If the address contains multiple lines, preserve them as spaces in the single output string. If the address is completely missing, return "null".
-
-        4. **Handle Incomplete Addresses:** If only parts of the address are available, return the partial address as a string. Clearly indicate any missing address components in a separate output field.
-
-        **Output Requirements:**
-            * **Format:** Return the extracted address as a single string. If incomplete, return the partial address.
-            * **If Not Found:** Return "null".
-            * **Additional Output Field (Optional):** For incomplete addresses, include a separate field (e.g., "Missing Address Components") that lists any missing parts.
-        """
+            [cite_start]**Output Format:** String (e.g., "203, HOEHYON-DONG 1-GA, CHUNG-GU, SEOUL, KOREA" [cite: 189][cite_start], "NO.1, Zhengtong Rd., Daliang Shunde, Foshan Guangdong, CHINA" [cite: 102]). [cite_start]Return `null` if not found[cite: 25, 34, 77].
+            """
         },
         {
-        "name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE",
-        "description": """
-        **You are an expert data extraction system. Your primary task is to extract and normalize the Beneficiary Bank's SWIFT/BIC code, ensuring it strictly conforms to international standards.**
+            "name": "BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE",
+            "description": """Extract and normalize the Beneficiary Bank's SWIFT/BIC code.
 
-        **Objective:** Accurately locate, validate, repair, and normalize the bank's SWIFT/BIC code based on the ISO 9362 standard.
+            **Typical Locations & Labels:**
+            * [cite_start]Found in 'Bank info' [cite: 96][cite_start], 'ADVISING BANK' [cite: 188][cite_start], 'Bank Details' [cite: 144, 229][cite_start], 'Seller's bank information' [cite: 146] sections.
+            * [cite_start]Labels: 'SWIFT Code:' [cite: 103, 191, 230][cite_start], 'SWIFT:'[cite: 149].
 
-        **Guidance for Extraction:**
+            **Extraction Logic:**
+            1.  **Primary Target: SWIFT/BIC:** Focus on codes explicitly labeled 'SWIFT' or 'BIC'.
+            2.  **ISO 9362 Validation:** Validate the extracted code against the 8 or 11 character ISO 9362 standard (`AAAABBCCDDD`).
+                * `AAAA` (4 letters Bank Code)
+                * `BB` (2 letters Country Code)
+                * `CC` (2 alphanumeric Location Code)
+                * `DDD` (3 alphanumeric Branch Code, optional)
+            3.  **Normalization:**
+                * [cite_start]If 8 characters (e.g., `ZEIBGMGM` [cite: 191]), append 'XXX' to make it 11 characters (e.g., `ZEIBGMGMXXX`).
+                * [cite_start]If already 11 characters (e.g., `HVBKKRSEXXX` [cite: 191][cite_start], `ABOCCNBJ190` [cite: 103][cite_start], `BKCHCNBJ92J` [cite: 149]), return as is.
+            4.  **No Fallback to Other Codes:** For this field, only extract SWIFT/BIC. Do not return IFSC, BSB, or Sort Code.
 
-        1.  **Primary Target: SWIFT/BIC Code**
-            * Your main goal is to find the SWIFT/BIC code.
-            * Look for labels such as `SWIFT Code:`, `BIC Code:`, `SWIFT/BIC:`, or `SWIFT:`.
-
-        2.  **Mandatory Validation Rule: ISO 9362 Standard**
-            * Any extracted SWIFT/BIC code **MUST** be validated against the formal ISO 9362 structure.
-            * **Structure:** `AAAABBCCDDD`
-                * `AAAA`: **4 letters** (Bank Code).
-                * `BB`: **2 letters** (Country Code).
-                * `CC`: **2 alphanumeric characters** (Location Code).
-                * `DDD`: **3 alphanumeric characters** (Branch Code, optional).
-            * **Length:** The raw code must be **8 or 11 characters**.
-
-        3.  **Data Cleaning and Intelligent Repair:**
-            * **Repair with Confidence:** Use the strict ISO 9362 rules to fix common OCR errors (e.g., '8' -> 'B', '5' -> 'S').
-                * *Example:* If OCR reads `BSAB3SBB`, recognize the 5th character (Country Code) must be a letter and repair it to `BSABESBB`.
-            * **Diacritic Conversion:** Convert any diacritics (e.g., é, ñ) to standard English letters (e.g., e, n).
-
-        4.  **Final Output Formatting and Normalization (New Rule):**
-            * The final output string must contain **only the code itself**, stripped of all labels.
-            * **Length Normalization:**
-                * If the validated code is **8 characters** long, you **MUST append 'XXX'** to the end to create a standard 11-character code.
-                * If the validated code is already **11 characters** long, return it as is.
-
-        **Examples of Logic:**
-        * **Source Text:** "SWIFT: DEUTDEFF" -> Validate to `DEUTDEFF` (8 chars) -> Normalize to `DEUTDEFFXXX`
-        * **Source Text:** "BIC Code: NWBKGB2LXXX" -> Validate to `NWBKGB2LXXX` (11 chars) -> Return `NWBKGB2LXXX`
-        * **Source Text:** "SWIFT: BSABESBBXXX" -> Validate to `BSABESBBXXX` (11 chars) -> Return `BSABESBBXXX`
-
-        5.  **Fallback Strategy:**
-            * If, and only if, you can determine with high certainty that no SWIFT/BIC code is present, extract another valid bank identifier (e.g., IFSC, ABA). Do not apply normalization rules to these fallback codes.
-
-        **Output Requirements:**
-        * **Format:** Return the cleaned, validated, and normalized SWIFT/BIC code as a **single string** of 11 characters.
-        * **If Not Found:** If no valid bank identifier can be found after applying all rules, return **null**.
-        """
+            [cite_start]**Output Format:** String, always 11 characters (e.g., "HVBKKRSEXXX" [cite: 191][cite_start], "ABOCCNBJ190" [cite: 103][cite_start], "BKCHCNBJ92J" [cite: 149]). [cite_start]Return `null` if no valid SWIFT/BIC is found[cite: 25, 34, 77].
+            """
         },
         {
             "name": "Total Invoice Amount",
-            "description": """Extract the final, definitive total monetary sum due on the invoice. This amount should be inclusive of all items, charges, and taxes (if applicable and included in the final sum), and less any deductions reflected directly in this final total.
+            "description": """Extract the final, definitive total monetary sum due on the invoice, inclusive of all items, charges, and taxes (if applicable and included in the final sum), and less any reflected deductions.
 
-            **Typical Location & Labels:**
-            This value is often the most prominent total on the invoice. Look for labels such as 'Grand Total', 'Total Amount Due', 'Total Invoice Amount', 'Total Invoice Value', 'Please Pay This Amount', 'Net Total', 'Totale Fattura', 'Totale da pagare'.
+            **Typical Locations & Labels:**
+            * [cite_start]Most prominent total on the invoice[cite: 19, 27, 34, 77, 154, 226].
+            * [cite_start]Look for 'Total' [cite: 19, 27, 226][cite_start], 'Total in CHF' [cite: 27][cite_start], 'Total price' [cite: 77][cite_start], 'Total amount' [cite: 194, 226][cite_start], 'Base Total' [cite: 34][cite_start], 'TOTAL FOB SHANGHAI' [cite: 152][cite_start], 'Value:'[cite: 19].
 
-            **Important Considerations for Extraction:**
-            1.  **Definitive Total:** Ensure this is the ultimate figure the buyer is expected to pay. If multiple totals are present (e.g., Subtotal, Total with Tax), this should be the final one.
-            2.  **Numerical Value Only:** Extract only the numerical value. Do not include currency symbols or codes in this field's output (currency is typically a separate field). Ensure correct parsing of thousands separators (e.g., periods in European formats, commas in US formats) and decimal points/commas.
-            3.  **OCR Imperfections:** Numbers are susceptible to OCR errors (e.g., '8' vs '3', '5' vs '6'). Cross-verify with other totals or sums if possible.
-            4.  **Clarity and Prominence:** This amount is usually clearly set apart and emphasized.
+            **Extraction Logic:**
+            1.  **Definitive Figure:** Identify the ultimate amount to be paid. If multiple totals exist, ensure this is the final one.
+            2.  **Numerical Only:** Extract digits and decimal points only. [cite_start]Remove currency symbols (e.g., 'U$', '$', 'CHF') [cite: 19, 27, 34, 77, 153, 226] and thousands separators (e.g., comma, space) during extraction.
 
-            **Output Format:**
-            Extract the numerical value as a string, representing the exact monetary amount (e.g., '82.590,00', '15075.50').
-
-            **Example (from the `INVOICE.pdf` context):**
-            The document explicitly states 'Totale Fattura / Total Invoice Amount' as '82.590,00 EUR'[cite: 11]. The value '82.590,00' should be extracted for this field.
-
-            **Task:** Locate and accurately extract the final total amount due on the invoice.
-            """,
+            **Output Format:** String, representing a clean numerical value (e.g., "98496", "83000.00", "184350.00").
+            """
         },
         {
-            "name": "Invoice Amount", # Repeated field, ensure description helps differentiate or confirms synonymity
-            "description": """Extract the primary sum of the invoice. This often refers to the main total amount and can be synonymous with 'TOTAL_INVOICE_AMOUNT' if only one definitive total is presented. If multiple totals exist (e.g., Subtotal, Total before Tax, Grand Total), this should ideally capture the most representative invoiced amount, frequently the grand total.
+            "name": "Invoice Amount",
+            "description": """Extract the primary sum of the invoice. This is often synonymous with 'Total Invoice Amount' but serves as a general capture for the main financial figure.
 
-            **Typical Location & Labels:**
-            This can be found near labels like 'Invoice Amount', 'Total', 'Net Amount', or it might be the same figure as 'Grand Total' or 'Total Amount Due'.
+            **Typical Locations & Labels:**
+            * [cite_start]Often identical to 'Total Invoice Amount'[cite: 19, 27, 34, 77, 154, 226].
+            * Look for 'Total', 'Invoice Amount', or the most prominent single total.
 
-            **Important Considerations for Extraction:**
-            1.  **Synonymity with Total:** In many invoices, like the example document, this will be identical to the 'TOTAL_INVOICE_AMOUNT'. The purpose is to capture the main financial figure of the invoice.
-            2.  **Numerical Value Only:** Extract only the numerical value, excluding currency symbols or codes. Handle decimal and thousands separators appropriately.
-            3.  **OCR Imperfections:** Be cautious of OCR errors in numerical figures.
-            4.  **Contextual Understanding:** If the invoice structure is complex with multiple totals, identify which figure best represents the 'Invoice Amount' before specific deductions or charges if it's meant to be different from a final 'Grand Total'. For most straightforward invoices, it will be the main or grand total.
+            **Extraction Logic:**
+            1.  **Synonymity:** For most documents provided, this will be the same value as 'Total Invoice Amount'.
+            2.  **Numerical Only:** Extract digits and decimal points only. Remove currency symbols and thousands separators.
 
-            **Output Format:**
-            Extract the numerical value as a string (e.g., '82.590,00', '15075.50').
-
-            **Example (from the `INVOICE.pdf` context):**
-            The `INVOICE.pdf` shows 'Totale Fattura / Total Invoice Amount' as '82.590,00 EUR'[cite: 11]. There is no other distinct 'Invoice Amount' that differs from this total. Thus, for this document, the 'INVOICE_AMOUNT' is also '82.590,00'.
-
-            **Task:** Identify and extract the primary invoice amount.
-            """,
+            **Output Format:** String, representing a clean numerical value (e.g., "98496", "83000.00", "184350.00").
+            """
         },
         {
-            "name": "Beneficiary Name", # Often the same as Seller Name
-            "description": """Extract the name of the ultimate recipient of the funds for this invoice, who is typically the seller or exporter.
+            "name": "Beneficiary Name",
+            "description": """Extract the name of the ultimate recipient of the funds for this invoice, typically the seller or exporter.
 
-            **Typical Location & Labels:**
-            Look for labels such as 'Beneficiary', 'Beneficiary Name', 'Payable to', 'Pay To'. This name is often found in the 'Bank Details' or 'Payment Instructions' section.
-            If not explicitly labeled as 'Beneficiary', this is almost always the same as the 'SELLER_NAME'.
+            **Typical Locations & Labels:**
+            * [cite_start]Look for labels like 'Beneficiary' [cite: 144, 192][cite_start], 'Beneficiary Name'[cite: 97].
+            * [cite_start]Often found in the 'Bank Details' or 'Payment Instructions' section[cite: 96, 144, 146, 188].
+            * [cite_start]If not explicitly labeled, it's usually the 'Seller' or 'Exporter'[cite: 2, 70, 123].
 
-            **Important Considerations for Extraction:**
-            1.  **Primary Identification:** The goal is to identify the party to whom the payment is owed.
-            2.  **Seller as Beneficiary:** If no separate beneficiary name is listed in the payment section, assume the seller is the beneficiary and use the extracted 'SELLER_NAME'.
-            3.  **Consistency:** Check if the name in the letterhead/seller identification matches any name given in the payment details.
-            4.  **OCR Imperfections:** Names can be subject to OCR errors; extract the most plausible and complete name.
-            5.  **Completeness:** Include any legal suffixes (e.g., Srl, Ltd., Inc.) if they are part of the name.
+            **Extraction Logic:**
+            1.  [cite_start]**Prioritize Explicit Label:** First, look for a clear 'Beneficiary' or 'Beneficiary Name' label in the banking section[cite: 97, 144, 192].
+            2.  [cite_start]**Fallback to Seller/Exporter:** If no explicit beneficiary name in the bank details, assume the primary seller/exporter name from the document header or 'Seller'/'Exporter' section[cite: 2, 70, 123].
+            3.  [cite_start]**Completeness:** Include any legal suffixes (e.g., Co., Ltd., Pvt Ltd, AG)[cite: 2, 70, 97, 123, 192].
 
-            **Output Format:**
-            Extract the name as a single string.
-
-            **Example (from the `INVOICE.pdf` context):**
-            The seller is identified as 'La Marzocco Srl'[cite: 1, 13]. The bank details section [cite: 5] does not specify a different beneficiary name. Therefore, the 'BENEFICIARY_NAME' is 'La Marzocco Srl'.
-
-            **Task:** Identify and extract the beneficiary's name.
-            """,
+            [cite_start]**Output Format:** String (e.g., "HANWHA TOTALENERGIES PETROCHEMICAL CO., LTD." [cite: 192][cite_start], "FOSHAN DA LYU IMPORT AND EXPORT CO., LIMITED." [cite: 97][cite_start], "JCTIMES (Taizhou) Import & Export Co. Ltd." [cite: 144]).
+            """
         },
         {
-            "name": "Beneficiary Address", 
+            "name": "Beneficiary Address",
             "description": """Extract the full mailing address of the beneficiary (typically the seller/exporter) to whom the payment is directed.
 
-            **Typical Location & Labels:**
-            This address is commonly the same as the 'SELLER_ADDRESS'. Look for it in the seller's contact information section or header. If specific 'Beneficiary Address' details are provided separately in payment instructions, those should be prioritized.
+            **Typical Locations & Labels:**
+            * [cite_start]Often the same as the 'Seller Address' or 'Exporter' address[cite: 3, 71, 126, 212].
+            * [cite_start]Look for 'Beneficiary Add:' [cite: 98] within the bank details section.
 
-            **Important Considerations for Extraction:**
-            1.  **Seller's Address as Default:** If no distinct beneficiary address is given in payment instructions, use the seller's primary business address.
-            2.  **Multiple Seller Addresses:** If the seller has multiple addresses listed (e.g., registered office, operational address), use the one most relevant for correspondence or invoicing, often the operational or main address, unless payment instructions specify otherwise. This should be consistent with what is extracted for 'SELLER_ADDRESS' if the beneficiary is the seller.
-            3.  **Completeness:** Ensure the full address is captured, including street, city, postal code, state/province, and country.
-            4.  **OCR Imperfections:** Address text can be dense and prone to errors.
-            5.  **Formatting:** Preserve multi-line formatting using '\\n' if the address is presented over multiple lines.
+            **Extraction Logic:**
+            1.  [cite_start]**Prioritize Explicit Beneficiary Address:** If 'Beneficiary Add:' is explicitly provided in the banking section[cite: 98], use that.
+            2.  [cite_start]**Fallback to Seller/Exporter Address:** If no distinct beneficiary address in banking details, use the primary address of the seller/exporter as listed at the top or 'Seller'/'Exporter' section[cite: 3, 71, 126, 212].
+            3.  **Exclude Bank Address:** Do NOT extract the bank's address for this field.
+            4.  **Completeness & Formatting:** Capture the full address, including street, city, postal code, state/province, and country. [cite_start]Use '\\n' for multi-line formatting[cite: 3, 71, 98, 126, 212].
 
-            **Output Format:**
-            Extract the full address as a single string, using '\\n' for line breaks if applicable.
-
-            **Example (from the `INVOICE.pdf` context):**
-            The beneficiary is 'La Marzocco Srl'. The document lists their 'Sede Operativa ed Amministrativa' as 'Via La Torre 14/Н 50038 Scarperia e San Piero (FI) - Italia' [cite: 1] and 'Sede Legale' as 'Viale G. Matteotti, 25 50121 FIRENZE (FI)'[cite: 13]. Assuming the operational address is the primary one for such purposes unless specified otherwise, this would be 'Via La Torre 14/Н\\n50038 Scarperia e San Piero (FI) - Italia'.
-
-            **Task:** Identify and extract the beneficiary's full mailing address.
-            """,
+            [cite_start]**Output Format:** String (e.g., "19F Hanwha Finance Plaza\n92, Sejong-daero, Jung-gu\nSeoul 04525, South Korea", "NO.2124,2125,2126, BUILDING 3, MIDEA WONDERFUL SQUARE, NO.9 NANXIA NEW ROAD, NANJIANG COMMUNITY, DALIANG STREET, SHUNDE DISTRICT, FOSHAN CITY, GUANGDONG PROVINCE, CHINA" [cite: 98]).
+            """
         },
         {
             "name": "DESCRIPTION OF GOODS",

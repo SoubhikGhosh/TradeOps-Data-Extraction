@@ -17,3 +17,5 @@ Pillow>=9.0.0 # Dependency for pdf2image
 PyMuPDF>=1.22.0
 
 json5
+google-generativeai
+google-api-core

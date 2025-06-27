@@ -1,12 +1,12 @@
 # main.py
 import os
 import shutil
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks # <--- THE FIX IS HERE
 from fastapi.responses import FileResponse
 import tempfile
 
 from utils import log, setup_logger
-from processing import process_zip_file # This now uses the new workflow
+from processing import process_zip_file
 from config import TEMP_DIR, SUPPORTED_FILE_EXTENSIONS
 
 # Ensure temp processing directory exists
@@ -15,16 +15,14 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 # Initialize logger
 setup_logger()
 
-app = FastAPI(title="Document Processing Service", version="2.0.0") # Version bump might be nice
+app = FastAPI(title="Document Processing Service", version="2.0.0")
 
 def cleanup_file(file_path: str):
     """Background task to delete a file."""
     try:
-        if os.path.exists(file_path): # Check if file exists before removing
+        if os.path.exists(file_path):
             os.remove(file_path)
             log.info(f"Cleaned up temporary file: {file_path}")
-        # else: # Optional: log if already deleted
-        #     log.info(f"Cleanup skipped, file already removed: {file_path}")
     except OSError as e:
         log.error(f"Error cleaning up file {file_path}: {e}")
 
@@ -32,8 +30,8 @@ def cleanup_file(file_path: str):
 async def create_upload_file(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     """
     Accepts a ZIP file containing case folders with document files (PDF, PNG, JPEG).
-    Processes them using Vertex AI (Classification then Extraction).
-    Returns an Excel spreadsheet with extracted data, confidence, and reasoning.
+    Processes them using Gemini API (Classification then Extraction).
+    Returns an Excel spreadsheet with extracted data.
     """
     if not file.filename.endswith(".zip"):
         log.error(f"Invalid file type uploaded: {file.filename}. Only .zip files are accepted.")
@@ -41,7 +39,7 @@ async def create_upload_file(background_tasks: BackgroundTasks, file: UploadFile
 
     log.info(f"Received file: {file.filename}, Content-Type: {file.content_type}")
 
-    temp_zip_path = None # Initialize path variable
+    temp_zip_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".zip", dir=TEMP_DIR) as temp_zip_file:
             shutil.copyfileobj(file.file, temp_zip_file)
@@ -50,19 +48,18 @@ async def create_upload_file(background_tasks: BackgroundTasks, file: UploadFile
 
     except Exception as e:
          log.exception(f"Failed to save uploaded file {file.filename}: {e}")
-         # Ensure cleanup if temp file was partially created but saving failed
          if temp_zip_path and os.path.exists(temp_zip_path):
              background_tasks.add_task(cleanup_file, temp_zip_path)
          raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {e}")
     finally:
         await file.close()
 
-    if not temp_zip_path: # Check if path was successfully assigned
+    if not temp_zip_path:
          raise HTTPException(status_code=500, detail="Failed to create temporary file path.")
 
     try:
         log.info(f"Starting processing for temporary zip: {temp_zip_path}")
-        output_excel_path = process_zip_file(temp_zip_path) # Calls the updated function
+        output_excel_path = process_zip_file(temp_zip_path)
         log.info(f"Processing complete. Output Excel at: {output_excel_path}")
 
         background_tasks.add_task(cleanup_file, output_excel_path)
@@ -98,3 +95,7 @@ async def root():
 
 # --- To run the server ---
 # uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+#sudo kill -9 $(sudo lsof -t -i:<PORT_NUMBER>)
+
+#    sudo kill -9 $(sudo lsof -t -i:8000)

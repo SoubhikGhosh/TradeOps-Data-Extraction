@@ -1,3 +1,3 @@
 curl -X POST "http://localhost:8000/process-zip/" \
-     -F "file=@/path/to/your/input_files.zip" \
+     -F "file=@/Users/akankshagupta/Downloads/TEST/Archive.zip" \
      -o "result.xlsx"
