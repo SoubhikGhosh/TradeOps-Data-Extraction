@@ -38,9 +38,10 @@ SAFETY_SETTINGS = {
 # --- Processing Configuration ---
 MAX_WORKERS = 100  # Adjust based on CPU cores and API limits for parallel processing
 TEMP_DIR = "temp_processing"
-OUTPUT_FILENAME = "extracted_data.xlsx"
+OUTPUT_FILENAME = "extracted_data.csv"
 DEFAULT_CONFIDENCE_THRESHOLD = 0.60
-EXTRACTION_MAX_ATTEMPTS = 3
+EXTRACTION_MAX_ATTEMPTS = 100
+JSON_CORRECTION_ATTEMPTS = 3  # Number of attempts to correct JSON parsing errors using LLM
 
 # --- Logging Configuration ---
 LOG_FILE = "app_log.log"

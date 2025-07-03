@@ -1,5 +1,3 @@
-# processing.py
-
 import os
 import zipfile
 import tempfile
@@ -25,7 +23,7 @@ from config import (
     DOCUMENT_FIELDS, MAX_WORKERS, TEMP_DIR, OUTPUT_FILENAME,
     EXTRACTION_PROMPT_TEMPLATE, CLASSIFICATION_PROMPT_TEMPLATE,
     SUPPORTED_MIME_TYPES, SUPPORTED_FILE_EXTENSIONS, EXCEL_COLUMN_ORDER,
-    DEFAULT_CONFIDENCE_THRESHOLD, EXTRACTION_MAX_ATTEMPTS # Added these in config.py
+    DEFAULT_CONFIDENCE_THRESHOLD, EXTRACTION_MAX_ATTEMPTS, JSON_CORRECTION_ATTEMPTS
 )
 from utils import log, parse_filename_for_grouping
 
@@ -63,7 +61,7 @@ def get_mime_type(file_path):
 def _call_vertex_ai_with_retry(
     model_instance: GenerativeModel,
     prompt_parts: List[Any],
-    max_retries: int = 100,
+    max_retries: int = EXTRACTION_MAX_ATTEMPTS,
     initial_delay: float = 1.0,
     exponential_base: float = 2.0,
     jitter: bool = True
@@ -94,8 +92,16 @@ def _call_vertex_ai_with_retry(
     while True:
         try:
             log.debug(f"Attempting Vertex AI API call (Attempt {num_retries + 1}/{max_retries + 1})")
-            response = model_instance.generate_content(prompt_parts, safety_settings=SAFETY_SETTINGS) # Added safety_settings
+            response = model_instance.generate_content(prompt_parts, safety_settings=SAFETY_SETTINGS)
             log.debug(f"Vertex AI API call successful (Attempt {num_retries + 1}/{max_retries + 1})")
+            
+            # --- NEW: Log the raw LLM response ---
+            if hasattr(response, 'text') and response.text:
+                log.info(f"LLM Raw Output Dump:\n{response.text}")
+            else:
+                log.info(f"LLM Raw Output Dump: (No text attribute or empty text) {response}")
+            # --- END NEW ---
+
             return response
         except retryable_errors as e:
             num_retries += 1
@@ -210,6 +216,81 @@ def _parse_vertex_json_response(response: Any, context: str) -> Dict:
         current_text_to_log = processed_text if processed_text else (response.text if hasattr(response, 'text') else str(response))
         return {"error": f"Unexpected Parsing Error: {str(e)}", "raw_response": current_text_to_log}
 
+# New function for LLM-based JSON correction
+def _correct_json_with_llm(
+    model_instance: GenerativeModel,
+    malformed_json_text: str,
+    parsing_error: str,
+    original_prompt: str,
+    original_parts: List[Part],
+    context: str,
+    correction_attempts_left: int = 2
+) -> Tuple[Dict, str]:
+    """
+    Calls the LLM to correct a malformed JSON response, providing the error message.
+    Returns the parsed dictionary and the raw corrected JSON string.
+    """
+    if correction_attempts_left <= 0:
+        log.error(f"Max JSON correction attempts reached for {context}. Giving up.")
+        return {"error": "Max JSON correction attempts reached"}, ""
+
+    log.info(f"Attempting JSON correction for {context}. Remaining attempts: {correction_attempts_left}")
+    correction_prompt = f"""
+    The following text was intended to be a JSON object, but it failed to parse with the following error:
+    --- JSON PARSING ERROR ---
+    {parsing_error}
+    --- END OF ERROR ---
+
+    --- MALFORMED JSON TEXT ---
+    {malformed_json_text}
+    --- END OF MALFORMED JSON TEXT ---
+
+    The original instruction was to generate a JSON object based on the document and this prompt:
+    --- ORIGINAL INSTRUCTION PROMPT ---
+    {original_prompt}
+    --- END OF ORIGINAL INSTRUCTION PROMPT ---
+
+    Please correct the malformed JSON text above, strictly ensuring it is a valid and parsable JSON object.
+    Do not add any additional text, explanations, or markdown fences (```json) around the corrected JSON.
+    Simply output the corrected, valid JSON object. Ensure all original data is preserved and no information is lost.
+    """
+    
+    full_correction_request_content = [correction_prompt]
+    # If original document context is needed for correction, uncomment the line below
+    # full_correction_request_content.extend(original_parts) 
+
+    try:
+        correction_response = _call_vertex_ai_with_retry(
+            model_instance=model,
+            prompt_parts=full_correction_request_content,
+            max_retries=3,
+            initial_delay=0.5
+        )
+        corrected_text = correction_response.text.strip()
+        
+        # Strip markdown fences if the LLM mistakenly adds them back
+        if corrected_text.startswith("```json"):
+            corrected_text = corrected_text[7:-3].strip()
+        elif corrected_text.startswith("```"):
+            corrected_text = corrected_text[3:-3].strip()
+
+        log.debug(f"Received corrected JSON text for {context}. Attempting re-parsing.")
+        parsed_data = json5.loads(corrected_text)
+
+        if not isinstance(parsed_data, dict):
+            log.warning(f"Corrected JSON for {context} is not a dictionary. Type: {type(parsed_data)}. Retrying correction.")
+            return _correct_json_with_llm(model_instance, corrected_text, "Parsed data is not a dictionary", original_prompt, original_parts, context, correction_attempts_left - 1)
+        
+        log.info(f"Successfully corrected and parsed JSON for {context}.")
+        return parsed_data, corrected_text
+
+    except (ValueError, json.JSONDecodeError) as val_err:
+        log.warning(f"JSON correction for {context} still failed after re-attempt. Error: {val_err}. Retrying correction.")
+        return _correct_json_with_llm(model_instance, corrected_text, str(val_err), original_prompt, original_parts, context, correction_attempts_left - 1)
+    except Exception as e:
+        log.error(f"Unexpected error during JSON correction for {context}: {e}")
+        return {"error": f"Correction process error: {e}"}, ""
+
 # --- Stage 1: Grouping by Base Filename ---
 def _group_files_by_base_name(folder_path: Path) -> Dict[str, List[Dict]]:
     """Groups document files (PDF, PNG, JPEG) in a folder by parsed base name and sorts by page number."""
@@ -287,12 +368,12 @@ def _extract_data_from_document(
     document_files: list,
     classified_doc_type: str,
     fields_to_extract: list,
-    max_attempts: int = EXTRACTION_MAX_ATTEMPTS, # Configurable max attempts for extraction
-    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD # Configurable confidence threshold
-) -> Dict[str, Any]: # Returns a dictionary with extracted fields or error
+    max_attempts: int = EXTRACTION_MAX_ATTEMPTS,
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD
+) -> Dict[str, Any]:
     """
     Uses Vertex AI Gemini model to extract data for a *classified* document type,
-    implementing a re-ask strategy based on extraction confidence.
+    implementing a re-ask strategy based on extraction confidence and JSON parsing failures.
     """
     log.info(f"Starting extraction for Case: {case_id}, Group: '{base_name}', Type: {classified_doc_type}, Pages: {len(document_files)}")
     context = f"Case: {case_id}, Group: '{base_name}', Type: {classified_doc_type} (Extraction)"
@@ -310,7 +391,7 @@ def _extract_data_from_document(
            return {"error": "Failed to prepare document parts for extraction"}
 
     field_list_str = "\n".join([f"- **{field_dict['name']}**: {field_dict['description']}" for field_dict in fields_to_extract])
-    prompt = EXTRACTION_PROMPT_TEMPLATE.format(
+    original_extraction_prompt = EXTRACTION_PROMPT_TEMPLATE.format(
         doc_type=classified_doc_type,
         case_id=case_id,
         num_pages=len(parts),
@@ -318,50 +399,66 @@ def _extract_data_from_document(
     )
     log.debug(f"Generated extraction prompt for {context}")
 
-    # --- Re-ask Loop Implementation ---
     current_attempt = 0
-    # Store the best result for each field across attempts
-    best_field_extractions: Dict[str, Dict[str, Any]] = {} 
+    best_field_extractions: Dict[str, Dict[str, Any]] = {}
     
     while current_attempt < max_attempts:
         log.info(f"Extraction attempt {current_attempt + 1}/{max_attempts} for {context}")
+        
+        extraction_succeeded_this_attempt = False # Flag to control loop progression
+
         try:
-            full_request_content = [prompt] + parts
+            full_request_content = [original_extraction_prompt] + parts
             response = _call_vertex_ai_with_retry(
                 model_instance=model,
                 prompt_parts=full_request_content,
-                max_retries=5, # API retry mechanism attempts per model call
+                max_retries=5,
                 initial_delay=1.0
             )
             
+            raw_response_text = response.text if hasattr(response, 'text') else str(response)
             extracted_data = _parse_vertex_json_response(response, context)
-            
-            if "error" in extracted_data:
-                log.warning(f"Extraction attempt {current_attempt + 1} failed with parsing/API error for {context}: {extracted_data.get('error')}")
-                # If parsing fails or content is blocked, it's a critical error for this attempt
-                # Re-try, but we need to ensure it doesn't loop indefinitely if it's consistently bad.
-                # The _call_vertex_ai_with_retry handles API retries. If _parse_vertex_json_response
-                # returns an error, it means the model's output was bad.
-                
-                # We can choose to either increment attempt and try again, or if it's a persistent
-                # parsing error, break. For now, let's allow it to re-attempt.
-                pass 
-            else:
-                # Check confidence for each required field
-                all_fields_confident_enough = True
-                current_attempt_field_confidences = {}
 
+            if "error" in extracted_data:
+                error_type = extracted_data.get("error")
+                if "JSON5 Decode Error" in error_type:
+                    log.warning(f"JSON parsing failed on attempt {current_attempt + 1} for {context}. Attempting LLM correction.")
+                    # Attempt to correct the JSON using LLM
+                    corrected_data, _ = _correct_json_with_llm(
+                        model_instance=model,
+                        malformed_json_text=extracted_data.get("raw_response", raw_response_text),
+                        parsing_error=extracted_data.get("details", "Unknown JSON parsing error"),
+                        original_prompt=original_extraction_prompt,
+                        original_parts=parts,
+                        context=context,
+                        correction_attempts_left= JSON_CORRECTION_ATTEMPTS
+                    )
+                    
+                    if "error" in corrected_data:
+                        log.error(f"LLM-based JSON correction ultimately failed for {context}: {corrected_data['error']}. Main extraction attempt will be retried.")
+                        # This means JSON correction failed even after its internal retries.
+                        pass 
+                    else:
+                        extracted_data = corrected_data # Use the successfully corrected data
+                        log.info(f"JSON successfully corrected by LLM for {context}.")
+                        extraction_succeeded_this_attempt = True # Parsing now succeeded, proceed to confidence check
+
+                else: # Other types of errors from _parse_vertex_json_response (e.g., content blocked)
+                    log.warning(f"Non-JSON parsing error on attempt {current_attempt + 1} for {context}: {error_type}")
+                    # No specific LLM correction for these, so this attempt is considered a failure for now
+                    pass 
+            else: # Initial parsing was successful
+                extraction_succeeded_this_attempt = True
+
+            if extraction_succeeded_this_attempt:
+                # If parsing (initial or corrected) was successful, evaluate field confidences
+                all_fields_confident_enough = True
                 for field_dict in fields_to_extract:
                     field_name = field_dict['name']
                     field_data_from_this_attempt = extracted_data.get(field_name, {})
                     value = field_data_from_this_attempt.get('value', None)
-                    confidence = field_data_from_this_attempt.get('confidence', 0.0) # Default to 0 if not present
+                    confidence = field_data_from_this_attempt.get('confidence', 0.0)
 
-                    current_attempt_field_confidences[field_name] = confidence
-
-                    # Update best extraction for this field
-                    # Prioritize value if it's explicitly present, even if confidence is 0.0, over 'null'
-                    # Or if confidence is higher than previously recorded best
                     if value is not None and (field_name not in best_field_extractions or confidence > best_field_extractions[field_name].get('confidence', -1.0)):
                         best_field_extractions[field_name] = {
                             "value": value,
@@ -373,86 +470,49 @@ def _extract_data_from_document(
                         log.warning(f"Field '{field_name}' extracted with low confidence ({confidence:.2f} < {confidence_threshold:.2f}) for {context} on attempt {current_attempt + 1}. Value: {value}")
                         all_fields_confident_enough = False
                     elif value is None or value == "null":
-                        log.warning(f"Field '{field_name}' extracted as null/None for {context} on attempt {current_attempt + 1}. Attempting re-extraction.")
-                        all_fields_confident_enough = False # Treat null/None as needing re-extraction
+                        log.warning(f"Field '{field_name}' extracted as null/None for {context} on attempt {current_attempt + 1}. Attempting re-extraction. (Value: {value})")
+                        all_fields_confident_enough = False
                 
-                # If all fields are good, or if we're at the last attempt, break the re-ask loop
                 if all_fields_confident_enough:
                     log.info(f"All required fields extracted with sufficient confidence for {context} on attempt {current_attempt + 1}.")
-                    break # Exit the re-ask loop
-                else:
-                    log.info(f"Some fields require re-extraction for {context}. Re-attempting...")
+                    break # Exit the main extraction loop
 
         except google_exceptions.GoogleAPIError as api_err:
             log.exception(f"Vertex AI API Error during {context} on attempt {current_attempt + 1}. Error: {api_err}")
-            # The _call_vertex_ai_with_retry already handles retries for these.
-            # If it still gets here, it means max_retries for the API call itself were exceeded.
-            # We should probably not re-attempt model logic if API is consistently failing.
             best_field_extractions["_overall_status"] = {"error": f"Persistent Vertex AI API Error: {api_err}"}
-            break # Break re-ask loop as API is failing
+            break
 
         except Exception as e:
             log.exception(f"Unexpected Error during {context} on attempt {current_attempt + 1}. Error: {e}")
             best_field_extractions["_overall_status"] = {"error": f"Unexpected Extraction Error: {e}"}
-            break # Break re-ask loop for unexpected errors
+            break
 
         current_attempt += 1
-        # Optional: Add a small delay between extraction attempts to avoid hammering the model/API
         if current_attempt < max_attempts:
-            time.sleep(random.uniform(0.5, 2.0)) # Jittered sleep between attempts
+            time.sleep(random.uniform(0.5, 2.0))
 
-    # After the loop, compile the final results based on best_field_extractions
     final_extraction_results = {}
     if "_overall_status" in best_field_extractions:
-        return best_field_extractions["_overall_status"] # Return immediate error if critical failure occurred
+        return best_field_extractions["_overall_status"]
 
     for field_dict in fields_to_extract:
         field_name = field_dict['name']
-        extracted_info = best_field_extractions.get(field_name, {"value": "null", "confidence": 0.0, "reasoning": "Not found or low confidence after attempts"})
+        extracted_info = best_field_extractions.get(field_name, {"value": None, "confidence": 0.0, "reasoning": "Not found or low confidence after attempts"})
         final_extraction_results[field_name] = {
             "value": extracted_info["value"],
             "confidence": extracted_info["confidence"],
             "reasoning": extracted_info.get("reasoning", "N/A")
         }
     
-    # Add a meta-field to indicate if any field was extracted with low confidence after all attempts
     final_extraction_results["_extraction_status"] = "Success"
     for field_name, info in final_extraction_results.items():
-        if field_name.startswith("_"): continue # Skip meta fields
-        if info["value"] == "null" or info["confidence"] < confidence_threshold:
+        if field_name.startswith("_"): continue
+        if info["value"] is None or info["value"] == "null" or info["confidence"] < confidence_threshold:
             final_extraction_results["_extraction_status"] = "Partial Success (Low Confidence/Missing Fields)"
             break
 
     log.info(f"Finished extraction attempts for {context}. Status: {final_extraction_results.get('_extraction_status', 'Unknown')}")
     return final_extraction_results
-
-
-MAX_EXCEL_CELL_LENGTH = 32700
-TRUNCATION_ELLIPSIS = "..."
-
-def sanitize_excel_string(text):
-    """
-    Sanitizes a string for Excel compatibility by:
-    1. Removing illegal XML characters (Excel uses XML format).
-    2. Truncating the string if it exceeds MAX_EXCEL_CELL_LENGTH, adding an ellipsis.
-    """
-    if not isinstance(text, str):
-        return text
-
-    try:
-        text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
-    except TypeError:
-        return text
-
-    if len(text) > MAX_EXCEL_CELL_LENGTH:
-        if MAX_EXCEL_CELL_LENGTH > len(TRUNCATION_ELLIPSIS):
-            text = text[:MAX_EXCEL_CELL_LENGTH - len(TRUNCATION_ELLIPSIS)] + TRUNCATION_ELLIPSIS
-        else:
-            text = text[:MAX_EXCEL_CELL_LENGTH]
-            
-    return text
-
-# --- Main Processing Function ---
 def process_zip_file(zip_file_path: str):
     """
     Main function (Revised Workflow):
@@ -460,10 +520,10 @@ def process_zip_file(zip_file_path: str):
     2. Groups files by base filename within each case.
     3. Classifies document type for each group using Vertex AI.
     4. Extracts data for successfully classified/supported types using Vertex AI with re-ask.
-    5. Aggregates results into a pandas DataFrame and saves to Excel.
+    5. Aggregates results into a pandas DataFrame and saves to CSV.
     """
     final_results_list = []
-    output_excel_path = Path(OUTPUT_FILENAME)
+    output_csv_path = Path(TEMP_DIR) / OUTPUT_FILENAME
 
     start_time = time.time()
 
@@ -614,22 +674,21 @@ def process_zip_file(zip_file_path: str):
             }
 
             if isinstance(extraction_result, dict) and "error" not in extraction_result:
-                row_data["Processing_Status"] = extraction_result.get("_extraction_status", "Extraction Successful") # Use status from re-ask
+                row_data["Processing_Status"] = extraction_result.get("_extraction_status", "Extraction Successful")
                 for field_dict in fields_to_extract:
                     field_name = field_dict['name']
-                    # Expecting {'value': ..., 'confidence': ..., 'reasoning': ...} from _extract_data_from_document
                     field_data = extraction_result.get(field_name) 
                     prefix = f"{classified_type}_{field_name}"
                     if isinstance(field_data, dict):
-                        row_data[f"{prefix}_Value"] = field_data.get('value')
+                        row_data[f"{prefix}_Value"] = str(field_data.get('value')) if field_data.get('value') is not None else None
                         row_data[f"{prefix}_Confidence"] = field_data.get('confidence')
                         row_data[f"{prefix}_Reasoning"] = field_data.get('reasoning')
-                    else: # Fallback if field_data itself is not a dict as expected (e.g., just "null")
+                    else:
                          log.warning(f"Unexpected format for field '{field_name}' in extraction response for {key}. Data: {field_data}")
-                         row_data[f"{prefix}_Value"] = str(field_data) # Store raw if format incorrect
-                         row_data[f"{prefix}_Confidence"] = 0.0 # Default confidence if not provided correctly
+                         row_data[f"{prefix}_Value"] = str(field_data) if field_data is not None else None
+                         row_data[f"{prefix}_Confidence"] = 0.0
                          row_data[f"{prefix}_Reasoning"] = "N/A - Format issue"
-                         row_data["Processing_Status"] = "Extraction Partially Successful (Format Issue)" # Downgrade status
+                         row_data["Processing_Status"] = "Extraction Partially Successful (Format Issue)"
             else:
                    error_msg = extraction_result.get('error', 'Unknown extraction error') if isinstance(extraction_result, dict) else 'Invalid extraction result'
                    row_data["Processing_Status"] = f"Extraction Failed: {error_msg}"
@@ -637,19 +696,14 @@ def process_zip_file(zip_file_path: str):
             final_results_list.append(row_data)
 
 
-        # --- 6. Save to Excel ---
+        # --- 6. Save to CSV ---
         if not final_results_list:
-               log.warning("No data rows were generated for the Excel file.")
+               log.warning("No data rows were generated for the CSV file.")
                df = pd.DataFrame([{"Status": "No data processed or extracted"}])
         else:
             log.info(f"Creating DataFrame from {len(final_results_list)} aggregated results.")
             df = pd.DataFrame(final_results_list)
 
-            log.info("Sanitizing DataFrame content for Excel compatibility...")
-            for col in df.columns:
-                if df[col].dtype == 'object':
-                    df[col] = df[col].astype(str).apply(sanitize_excel_string)
-            
             existing_cols = df.columns.tolist()
             ordered_cols = [col for col in EXCEL_COLUMN_ORDER if col in existing_cols]
             remaining_cols = sorted([col for col in existing_cols if col not in ordered_cols])
@@ -657,15 +711,15 @@ def process_zip_file(zip_file_path: str):
             df = df[final_cols]
 
         try:
-            log.info(f"Saving aggregated data to Excel: {output_excel_path}")
-            df.to_excel(output_excel_path, index=False, engine='openpyxl')
-            log.info("Excel file saved successfully.")
+            log.info(f"Saving aggregated data to CSV: {output_csv_path}")
+            df.to_csv(output_csv_path, index=False, encoding='utf-8')
+            log.info("CSV file saved successfully.")
             elapsed_time = time.time() - start_time
             log.info(f"Total processing time for {zip_file_path}: {elapsed_time:.2f} seconds.")
-            return str(output_excel_path)
+            return str(output_csv_path)
         except Exception as e:
-            log.exception(f"Failed to save DataFrame to Excel file '{output_excel_path}': {e}")
+            log.exception(f"Failed to save DataFrame to CSV file '{output_csv_path}': {e}")
             elapsed_time = time.time() - start_time
-            log.error(f"Processing failed after {elapsed_time:.2f} seconds while saving Excel.")
-            raise RuntimeError(f"Failed to save results to Excel: {e}")
+            log.error(f"Processing failed after {elapsed_time:.2f} seconds while saving CSV.")
+            raise RuntimeError(f"Failed to save results to CSV: {e}")
     log.info("Temporary directory cleaned up.")
