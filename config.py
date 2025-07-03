@@ -1,4 +1,5 @@
 # config.py
+
 import os
 from dotenv import load_dotenv
 from vertexai.generative_models import HarmCategory, HarmBlockThreshold

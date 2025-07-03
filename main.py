@@ -1,4 +1,5 @@
 # main.py
+
 import os
 import shutil
 from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
@@ -23,8 +24,8 @@ def cleanup_file(file_path: str):
         if os.path.exists(file_path): # Check if file exists before removing
             os.remove(file_path)
             log.info(f"Cleaned up temporary file: {file_path}")
-        # else: # Optional: log if already deleted
-        #     log.info(f"Cleanup skipped, file already removed: {file_path}")
+        else: # Optional: log if already deleted
+            log.info(f"Cleanup skipped, file already removed: {file_path}")
     except OSError as e:
         log.error(f"Error cleaning up file {file_path}: {e}")
 
