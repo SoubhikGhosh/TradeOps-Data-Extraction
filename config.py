@@ -58,51 +58,52 @@ EXCEL_COLUMN_ORDER = [
     "CLASSIFICATION_Reasoning",
 
     # === Fields for CRL ===
-    "CRL_APPLICANT NAME_Value",
-    "CRL_APPLICANT ADDRESS_Value",
-    "CRL_APPLICANT COUNTRY_Value",
-    "CRL_TRANSACTION Product Code Selection_Value",
-    "CRL_CUSTOMER REQUEST LETTER DATE_Value",
-    "CRL_TYPE OF GOODS_Value",
-    "CRL_DESCRIPTION OF GOODS_Value",
-    "CRL_MODE OF REMITTANCE_Value",
-    "CRL_DATE & TIME OF RECEIPT OF DOCUMENT_Value",
-    "CRL_DEBIT ACCOUNT NO_Value",
-    "CRL_FEE ACCOUNT NO_Value",
-    "CRL_REMITTANCE AMOUNT_Value",
-    "CRL_REMITTANCE CURRENCY_Value",
-    "CRL_CURRENCY AND AMOUNT OF REMITTANCE IN WORDS_Value",
-    "CRL_BENEFICIARY NAME_Value",
-    "CRL_BENEFICIARY ADDRESS_Value",
-    "CRL_BENEFICIARY COUNTRY_Value",
-    "CRL_BENEFICIARY BANK_Value",
-    "CRL_BENEFICIARY ACCOUNT NO / IBAN_Value",
-    "CRL_BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE_Value",
-    "CRL_BENEFICIARY BANK ADDRESS_Value",
-    "CRL_INTERMEDIARY BANK NAME_Value",
-    "CRL_INTERMEDIARY BANK ADDRESS_Value",
-    "CRL_INTERMEDIARY BANK COUNTRY_Value",
-    "CRL_FB CHARGES_Value",
-    "CRL_LATEST SHIPMENT DATE_Value",
-    "CRL_DISPATCH PORT_Value",
-    "CRL_DELIVERY PORT_Value",
-    "CRL_INVOICE NO_Value",
-    "CRL_INVOICE DATE_Value",
-    "CRL_INVOICE VALUE_Value",
-    "CRL_HS CODE_Value",
-    "CRL_IMPORT LICENSE DETAILS_Value",
-    "CRL_COUNTRY OF ORIGIN_Value",
-    "CRL_SPECIFIC REFERENCE FOR SWIFT FIELD 70/72_Value",
-    "CRL_TREASURY REFERENCE NO_Value",
-    "CRL_STANDARD DECLARATIONS AS PER PRODUCTS_Value",
-    "CRL_TRANSACTION EVENT_Value",
-    "CRL_VALUE DATE_Value",
-    "CRL_INCO TERM_Value",
-    "CRL_THIRD PARTY EXPORTER NAME_Value",
-    "CRL_THIRD PARTY EXPORTER COUNTRY_Value",
-    "CRL_EXCHANGE RATE_Value",
-    "CRL_APPLICANT SIGNATURE_Value",
-    "CRL_CUSTOMER SIGNATURE_Value",
+    "CRL_DATE & TIME OF RECEIPT OF DOCUMENT_Value"
+    "CRL_TRANSACTION Product Code Selection_Value"
+    "CRL_CUSTOMER REQUEST LETTER DATE_Value"
+    "CRL_DESCRIPTION OF GOODS_Value"
+    "CRL_TYPE OF GOODS_Value"
+    "CRL_MODE OF REMITTANCE_Value"
+    "CRL_APPLICANT NAME_Value"
+    "CRL_APPLICANT ADDRESS_Value"
+    "CRL_APPLICANT COUNTRY_Value"
+    "CRL_DEBIT ACCOUNT NO_Value"
+    "CRL_FEE ACCOUNT NO_Value"
+    "CRL_REMITTANCE AMOUNT_Value"
+    "CRL_REMITTANCE CURRENCY_Value"
+    "CRL_CURRENCY AND AMOUNT OF REMITTANCE IN WORDS_Value"
+    "CRL_BENEFICIARY NAME_Value"
+    "CRL_BENEFICIARY ADDRESS_Value"
+    "CRL_BENEFICIARY COUNTRY_Value"
+    "CRL_BENEFICIARY ACCOUNT NO / IBAN_Value"
+    "CRL_BENEFICIARY BANK_Value"
+    "CRL_BENEFICIARY BANK ADDRESS_Value"
+    "CRL_BENEFICIARY BANK SWIFT CODE / SORT CODE/ BSB / IFS CODE_Value"
+    "CRL_FB CHARGES_Value"
+    "CRL_INTERMEDIARY BANK NAME_Value"
+    "CRL_INTERMEDIARY BANK ADDRESS_Value"
+    "CRL_INTERMEDIARY BANK COUNTRY_Value"
+    "CRL_INTERMEDIARY BANK SWIFT_Value"
+    "CRL_LATEST SHIPMENT DATE_Value"
+    "CRL_DISPATCH PORT_Value"
+    "CRL_DELIVERY PORT_Value"
+    "CRL_HS CODE_Value"
+    "CRL_IMPORT LICENSE DETAILS_Value"
+    "CRL_COUNTRY OF ORIGIN_Value"
+    "CRL_INVOICE NO_Value"
+    "CRL_INVOICE DATE_Value"
+    "CRL_INVOICE VALUE_Value"
+    "CRL_SPECIFIC REFERENCE FOR SWIFT FIELD 70/72_Value"
+    "CRL_TREASURY REFERENCE NO_Value"
+    "CRL_STANDARD DECLARATIONS AS PER PRODUCTS_Value"
+    "CRL_TRANSACTION EVENT_Value"
+    "CRL_CRL DATE_Value"
+    "CRL_INCO TERM_Value"
+    "CRL_THIRD PARTY EXPORTER NAME_Value"
+    "CRL_THIRD PARTY EXPORTER COUNTRY_Value"
+    "CRL_EXCHANGE RATE_Value"
+    "CRL_APPLICANT SIGNATURE_Value"
+    "CRL_CUSTOMER SIGNATURE_Value"
 
     # === Fields for Invoice ===
     "INVOICE_TYPE OF INVOICE - COMMERCIAL/PROFORMA/CUSTOMS_Value",
@@ -938,6 +939,37 @@ DOCUMENT_FIELDS = {
         **Output Requirements:**
         * **Format:** Return the extracted bank name as a single string.
         * **If Not Found:** Return "null".
+        """,
+        },
+        {
+        "name": "INTERMEDIARY BANK SWIFT",
+        "description": """
+        **You are an expert data extraction system. Your task is to extract the Intermediary Bank's 11-character SWIFT code from the document, handling potential diacritics. If an 8-character code is found, pad it with 'XXX'. If no SWIFT code is found, extract other relevant bank identifiers.**
+
+        **Objective:** Accurately locate and return an 11-character alphanumeric string representing the Intermediary Bank's SWIFT/BIC code.  Handle diacritics by converting them to their closest English alphabet equivalent. If a valid 11-character SWIFT code (after diacritic conversion) is not found, extract other bank identifiers (IFSC, Sort Code, BSB, ABA) and indicate the type of code extracted.
+
+        **Guidance for Extraction:**
+
+        1. **Priority: SWIFT Code:** First, search for a SWIFT/BIC code. Look for labels such as 'SWIFT Code:', 'BIC Code:', 'SWIFT/BIC:', 'Intermediary Bank SWIFT:'. The code will be 8 or 11 characters.  If an 8-character code is found, append 'XXX' to reach 11 characters.
+
+        2. **Diacritic Conversion:** If the extracted SWIFT code contains diacritics (e.g., accents), convert them to their closest English alphabet equivalent (e.g., 'é' to 'e', 'ü' to 'u').  Use a simple, character-by-character substitution. Do not use advanced transliteration techniques.
+
+        3. **Validation:** After diacritic conversion, validate that the result is an 11-character alphanumeric string. If not, proceed to step 4.
+
+        4. **Alternative Identifiers:** If no valid SWIFT code is found after diacritic conversion, search for alternative bank identifiers: IFSC, Sort Code, BSB Number, Routing Number/ABA Number. Use the same labeling conventions and format validations as in the previous prompt (see previous prompt for details). Choose the first valid identifier found.
+
+        5. **Format and Validation:** After extraction, validate the length and character type (alphanumeric for SWIFT/BIC, numeric for others). If the extracted identifier is invalid for its respective type, return "null".
+
+        6. **What to Extract:** Return an 11-character alphanumeric string if a SWIFT code is found (padded and converted as necessary). Otherwise, return the first valid alternative identifier found (IFSC, Sort Code, BSB, ABA), including the type of code (e.g., "IFSC: HDFC0000123").
+
+        7. **Output Format:** If a valid 11-character SWIFT code (after diacritic conversion) is found, return the code as a string. If no valid SWIFT code is found, return the first valid alternative identifier and its type. If no valid code of any type is found, return "null".
+
+        **Examples:**
+            * "SWIFT Code: BKCHCNBjø" -> "BKCHCNBJXXX" (diacritic removed and padded to 11 characters)
+            * "IFSC: HDFC0000123"
+            * "Sort Code: 203040"
+
+        **Output Requirements:** Return an 11-character alphanumeric string (SWIFT code) if found (after diacritic conversion and padding). Otherwise, return the type and value of the first valid alternative code found. If no valid code is found, return "null".
         """,
         },
         {
